@@ -1,0 +1,860 @@
+/* Mirror — shadcn default (neutral) palette, frosted surfaces, on-media chrome. */
+
+:root {
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+
+  /* shadcn default palette — light */
+  --background: #ffffff;
+  --foreground: #09090b;
+  --card: #ffffff;
+  --popover: #ffffff;
+  --primary: #18181b;
+  --primary-foreground: #fafafa;
+  --secondary: #f4f4f5;
+  --muted: #f4f4f5;
+  --muted-foreground: #71717a;
+  --accent: #f4f4f5;
+  --accent-foreground: #18181b;
+  --destructive: #ef4444;
+  --border: #e4e4e7;
+  --input: #e4e4e7;
+  --ring: #18181b;
+
+  /* frosted layers derived from the palette */
+  --glass: rgba(255, 255, 255, .74);
+  --glass-strong: rgba(255, 255, 255, .9);
+  --glass-soft: rgba(9, 9, 11, .045);
+  --glass-hover: rgba(9, 9, 11, .08);
+  --glass-border: rgba(9, 9, 11, .09);
+  --glass-border-strong: rgba(9, 9, 11, .16);
+  --shadow: 0 24px 70px rgba(9, 9, 11, .16);
+  --scroll-thumb: rgba(9, 9, 11, .2);
+  --scroll-thumb-hover: rgba(9, 9, 11, .36);
+
+  /* chrome that floats above video */
+  --chrome-fg: #fafafa;
+  --chrome-fg-muted: rgba(250, 250, 250, .74);
+  --chrome-line: rgba(250, 250, 250, .22);
+  --chrome-scrim-top: linear-gradient(180deg, rgba(9, 9, 11, .74), rgba(9, 9, 11, .22), transparent);
+  --chrome-scrim-bottom: linear-gradient(0deg, rgba(9, 9, 11, .88), rgba(9, 9, 11, .42), transparent);
+
+  color: var(--foreground);
+  background: var(--background);
+}
+
+:root[data-theme="dark"] {
+  --background: #09090b;
+  --foreground: #fafafa;
+  --card: #09090b;
+  --popover: #09090b;
+  --primary: #fafafa;
+  --primary-foreground: #18181b;
+  --secondary: #27272a;
+  --muted: #27272a;
+  --muted-foreground: #a1a1aa;
+  --accent: #27272a;
+  --accent-foreground: #fafafa;
+  --border: #27272a;
+  --input: #27272a;
+  --ring: #d4d4d8;
+
+  --glass: rgba(9, 9, 11, .74);
+  --glass-strong: rgba(24, 24, 27, .86);
+  --glass-soft: rgba(250, 250, 250, .06);
+  --glass-hover: rgba(250, 250, 250, .1);
+  --glass-border: rgba(250, 250, 250, .1);
+  --glass-border-strong: rgba(250, 250, 250, .17);
+  --shadow: 0 24px 80px rgba(0, 0, 0, .5);
+  --scroll-thumb: rgba(250, 250, 250, .16);
+  --scroll-thumb-hover: rgba(250, 250, 250, .3);
+
+  color: var(--foreground);
+  background: var(--background);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="system"] {
+    --background: #09090b;
+    --foreground: #fafafa;
+    --card: #09090b;
+    --popover: #09090b;
+    --primary: #fafafa;
+    --primary-foreground: #18181b;
+    --secondary: #27272a;
+    --muted: #27272a;
+    --muted-foreground: #a1a1aa;
+    --accent: #27272a;
+    --accent-foreground: #fafafa;
+    --border: #27272a;
+    --input: #27272a;
+    --ring: #d4d4d8;
+
+    --glass: rgba(9, 9, 11, .74);
+    --glass-strong: rgba(24, 24, 27, .86);
+    --glass-soft: rgba(250, 250, 250, .06);
+    --glass-hover: rgba(250, 250, 250, .1);
+    --glass-border: rgba(250, 250, 250, .1);
+    --glass-border-strong: rgba(250, 250, 250, .17);
+    --shadow: 0 24px 80px rgba(0, 0, 0, .5);
+    --scroll-thumb: rgba(250, 250, 250, .16);
+    --scroll-thumb-hover: rgba(250, 250, 250, .3);
+
+    color: var(--foreground);
+    background: var(--background);
+  }
+}
+
+* { box-sizing: border-box; }
+html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+body { background: transparent; }
+button, input { font: inherit; }
+button { color: inherit; }
+
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+/* ---------- scrollbars ---------- */
+
+/* Theme-aware, frameless scrollbars that only appear while hovering the
+   scrollable area, so panels stay visually quiet.
+
+   Only the `::-webkit-scrollbar` pseudo-elements are used. Setting the standard
+   `scrollbar-color` / `scrollbar-width` properties makes Chromium ignore those
+   pseudo-elements entirely, which brings back the native track frame. */
+.side-panel::-webkit-scrollbar,
+.playlist-items::-webkit-scrollbar,
+.settings-content::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+  background: transparent;
+  border: none;
+}
+
+.side-panel::-webkit-scrollbar-track,
+.playlist-items::-webkit-scrollbar-track,
+.settings-content::-webkit-scrollbar-track {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+/* Border + background-clip inset the thumb so there is no visible frame. */
+.side-panel::-webkit-scrollbar-thumb,
+.playlist-items::-webkit-scrollbar-thumb,
+.settings-content::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: content-box;
+}
+
+.side-panel:hover::-webkit-scrollbar-thumb,
+.playlist-items:hover::-webkit-scrollbar-thumb,
+.settings-content:hover::-webkit-scrollbar-thumb {
+  background-color: var(--scroll-thumb);
+}
+
+.side-panel:hover::-webkit-scrollbar-thumb:hover,
+.playlist-items:hover::-webkit-scrollbar-thumb:hover,
+.settings-content:hover::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scroll-thumb-hover);
+}
+
+.side-panel::-webkit-scrollbar-corner,
+.playlist-items::-webkit-scrollbar-corner,
+.settings-content::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* ---------- shell ---------- */
+
+.mirror-shell {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-width: 640px;
+  min-height: 360px;
+  overflow: hidden;
+  isolation: isolate;
+  background: var(--background);
+  color: var(--foreground);
+}
+
+.mirror-shell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 16% 6%, rgba(161, 161, 170, .1), transparent 34%),
+    radial-gradient(circle at 88% 94%, rgba(113, 113, 122, .08), transparent 32%),
+    var(--background);
+}
+
+/* while a video is loaded the window itself is the canvas */
+.mirror-shell.has-video { background: #000; }
+
+.mirror-shell.has-video::before { display: none; }
+
+/* ---------- titlebar ---------- */
+
+.titlebar {
+  position: absolute;
+  z-index: 10;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px;
+  color: var(--chrome-fg);
+  background: var(--chrome-scrim-top);
+  box-shadow: 0 10px 26px -22px rgba(0, 0, 0, .95);
+  transition: opacity .25s ease, transform .25s ease;
+  -webkit-app-region: drag;
+}
+
+.mirror-shell:not(.has-video) .titlebar {
+  color: var(--foreground);
+  background: linear-gradient(180deg, var(--glass-strong), var(--glass), transparent);
+  box-shadow: 0 1px 0 var(--glass-border), 0 12px 30px -26px rgba(9, 9, 11, .9);
+  backdrop-filter: blur(18px);
+}
+
+.chrome-hidden .titlebar {
+  opacity: 0;
+  transform: translateY(-12px);
+  pointer-events: none;
+}
+
+.brand-mark, .titlebar-actions, .titlebar-center { display: flex; align-items: center; }
+
+.brand-mark {
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: -.02em;
+}
+
+.brand-icon {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--glass-border-strong);
+  border-radius: 7px;
+  background: var(--glass-hover);
+}
+
+.titlebar-center {
+  max-width: 46%;
+  overflow: hidden;
+  color: var(--chrome-fg-muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mirror-shell:not(.has-video) .titlebar-center { color: var(--muted-foreground); }
+
+.titlebar-actions { gap: 1px; }
+.window-divider { width: 1px; height: 13px; margin: 0 4px; background: currentColor; opacity: .18; }
+.close-control:hover { color: #fca5a5; background: rgba(239, 68, 68, .18); }
+.no-drag, button, input { -webkit-app-region: no-drag; }
+
+/* ---------- buttons ---------- */
+
+.icon-button, .control-button, .play-button, .speed-button, .add-video-button,
+.empty-state, .center-play, .playlist-select, .clear-history,
+.mode-list button, .segmented-control button { border: 0; cursor: pointer; }
+
+.icon-button {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: transparent;
+  transition: background .2s ease, color .2s ease;
+}
+
+.icon-button.subtle { color: var(--chrome-fg-muted); }
+.mirror-shell:not(.has-video) .icon-button.subtle { color: var(--muted-foreground); }
+.icon-button:hover, .control-button:hover { color: var(--chrome-fg); background: var(--glass-hover); }
+.mirror-shell:not(.has-video) .icon-button:hover { color: var(--foreground); }
+.icon-button.active, .control-button.is-active { color: var(--foreground); background: var(--glass-hover); }
+.icon-button.tiny { width: 24px; height: 24px; color: var(--muted-foreground); }
+
+/* ---------- stage ---------- */
+
+.stage { position: absolute; inset: 0; display: grid; place-items: center; overflow: hidden; }
+.video-element { width: 100%; height: 100%; object-fit: contain; background: #000; cursor: pointer; }
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 36px 56px;
+  color: var(--muted-foreground);
+  background: transparent;
+}
+
+.empty-state strong { color: var(--foreground); font-size: 15px; font-weight: 600; }
+.empty-state > span:not(.empty-orb):not(.empty-action) { font-size: 12px; }
+
+.empty-orb {
+  display: grid;
+  place-items: center;
+  width: 68px;
+  height: 68px;
+  margin-bottom: 9px;
+  color: var(--primary);
+  border: 1px solid var(--glass-border-strong);
+  border-radius: 22px;
+  background: linear-gradient(150deg, var(--glass-hover), var(--glass-soft));
+  box-shadow: inset 0 1px rgba(255, 255, 255, .16);
+  transition: transform .2s ease, border-color .2s ease;
+}
+
+.empty-state:hover .empty-orb { transform: translateY(-3px); border-color: var(--ring); }
+
+.empty-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 10px;
+  padding: 9px 14px;
+  border: 1px solid var(--glass-border);
+  border-radius: 9px;
+  color: var(--foreground);
+  background: var(--glass-soft);
+  font-size: 12px;
+  transition: background .2s ease, border-color .2s ease;
+}
+
+.empty-state:hover .empty-action { border-color: var(--glass-border-strong); background: var(--glass-hover); }
+
+.drop-overlay {
+  position: absolute;
+  inset: 20px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 12px;
+  color: var(--chrome-fg);
+  border: 1px dashed var(--glass-border-strong);
+  border-radius: 18px;
+  background: rgba(9, 9, 11, .5);
+}
+
+.drop-overlay strong { font-size: 15px; }
+.drag-over .video-element { opacity: .58; }
+
+.center-play {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border: 1px solid var(--glass-border-strong);
+  border-radius: 50%;
+  color: var(--primary-foreground);
+  background: var(--primary);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, .4);
+  transition: transform .2s ease, opacity .2s ease;
+}
+
+.center-play:hover { transform: scale(1.05); opacity: .92; }
+
+/* ---------- player chrome ---------- */
+
+.player-chrome {
+  position: absolute;
+  z-index: 10;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  padding: 0 14px 10px;
+  color: var(--chrome-fg);
+  background: var(--chrome-scrim-bottom);
+  transition: opacity .25s ease, transform .25s ease;
+}
+
+.mirror-shell:not(.has-video) .player-chrome {
+  color: var(--foreground);
+  background: linear-gradient(0deg, var(--glass-strong), var(--glass), transparent);
+  box-shadow: 0 -1px 0 var(--glass-border);
+  backdrop-filter: blur(18px);
+}
+
+.chrome-hidden .player-chrome { opacity: 0; transform: translateY(12px); pointer-events: none; }
+
+.progress-row { display: flex; align-items: center; gap: 8px; }
+.time-label { min-width: 34px; color: var(--chrome-fg-muted); font-size: 10px; font-variant-numeric: tabular-nums; }
+.mirror-shell:not(.has-video) .time-label { color: var(--muted-foreground); }
+.time-label:last-child { text-align: right; }
+
+.progress-input, .volume-input, .range-setting input {
+  --progress: 0%;
+  appearance: none;
+  height: 4px;
+  margin: 0;
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--primary) var(--progress), var(--chrome-line) var(--progress));
+  cursor: pointer;
+}
+
+.mirror-shell:not(.has-video) .progress-input,
+.mirror-shell:not(.has-video) .volume-input { background: linear-gradient(to right, var(--primary) var(--progress), var(--secondary) var(--progress)); }
+
+.progress-input { flex: 1; }
+
+.progress-input::-webkit-slider-thumb,
+.volume-input::-webkit-slider-thumb,
+.range-setting input::-webkit-slider-thumb {
+  appearance: none;
+  width: 11px;
+  height: 11px;
+  border: 2px solid var(--background);
+  border-radius: 50%;
+  background: var(--primary);
+  box-shadow: 0 1px 5px rgba(0, 0, 0, .35);
+}
+
+.controls-row {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  margin-top: 6px;
+}
+
+.controls-left, .controls-center, .controls-right, .volume-control { display: flex; align-items: center; }
+.controls-left, .controls-right, .controls-center { gap: 2px; }
+.controls-center { justify-self: center; }
+.controls-right { justify-content: flex-end; }
+
+.control-button {
+  display: grid;
+  place-items: center;
+  position: relative;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  color: var(--chrome-fg-muted);
+  background: transparent;
+  transition: color .2s ease, background .2s ease;
+}
+
+.mirror-shell:not(.has-video) .control-button { color: var(--muted-foreground); }
+.mirror-shell:not(.has-video) .control-button:hover { color: var(--foreground); }
+
+.play-button {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  margin: 0 5px;
+  border-radius: 10px;
+  color: var(--primary-foreground);
+  background: var(--primary);
+  transition: opacity .2s ease, transform .2s ease;
+}
+
+.play-button:hover { transform: translateY(-1px); opacity: .9; }
+.volume-control { margin-left: 2px; gap: 4px; }
+.volume-input { width: 60px; height: 3px; }
+
+.speed-button {
+  min-width: 36px;
+  height: 23px;
+  padding: 0 7px;
+  border: 1px solid var(--glass-border);
+  border-radius: 6px;
+  color: var(--chrome-fg-muted);
+  background: var(--glass-soft);
+  font-size: 10px;
+  transition: color .2s ease, border-color .2s ease, background .2s ease;
+}
+
+.mirror-shell:not(.has-video) .speed-button { color: var(--muted-foreground); }
+.speed-button:hover { color: var(--chrome-fg); border-color: var(--glass-border-strong); background: var(--glass-hover); }
+
+/* ---------- floating pieces ---------- */
+
+.hidden-input { display: none; }
+
+/* ---------- transient status indicator ---------- */
+
+/* Floats near the top of the interface, independent of the auto-hiding chrome,
+   so feedback stays visible even when the controls are hidden. */
+.osd {
+  position: absolute;
+  z-index: 25;
+  top: 52px;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border: 1px solid var(--glass-border-strong);
+  border-radius: 999px;
+  color: var(--chrome-fg);
+  background: rgba(9, 9, 11, .55);
+  box-shadow: 0 10px 34px rgba(0, 0, 0, .38);
+  backdrop-filter: blur(18px) saturate(1.15);
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translateX(-50%);
+  animation: osd-in .18s ease;
+}
+
+:root[data-theme="light"] .osd {
+  color: var(--foreground);
+  background: rgba(255, 255, 255, .72);
+  box-shadow: 0 10px 30px rgba(9, 9, 11, .16);
+}
+
+@media (prefers-color-scheme: light) {
+  :root[data-theme="system"] .osd {
+    color: var(--foreground);
+    background: rgba(255, 255, 255, .72);
+    box-shadow: 0 10px 30px rgba(9, 9, 11, .16);
+  }
+}
+
+@keyframes osd-in {
+  from { opacity: 0; transform: translate(-50%, -6px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+/* ---------- panels ---------- */
+
+.panel-backdrop {
+  position: absolute;
+  z-index: 15;
+  inset: 0;
+  border: 0;
+  background: rgba(9, 9, 11, .42);
+  cursor: pointer;
+}
+
+.side-panel {
+  position: absolute;
+  z-index: 20;
+  top: 8px;
+  right: 8px;
+  bottom: 8px;
+  width: 316px;
+  overflow: auto;
+  padding: 16px 14px;
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+  color: var(--foreground);
+  background: var(--glass-strong);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(28px) saturate(1.2);
+  animation: panel-in .22s ease;
+}
+
+@keyframes panel-in {
+  from { opacity: 0; transform: translateX(18px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.panel-header { display: flex; align-items: flex-start; justify-content: space-between; padding-bottom: 14px; }
+
+.eyebrow {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--muted-foreground);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.panel-header h2 { margin: 0; font-size: 16px; letter-spacing: -.03em; }
+
+.add-video-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--glass-border-strong);
+  border-radius: 9px;
+  color: var(--primary-foreground);
+  background: var(--primary);
+  font-size: 11px;
+  font-weight: 600;
+  transition: opacity .2s ease;
+}
+
+.add-video-button:hover { opacity: .9; }
+
+.playlist-count { display: flex; align-items: center; justify-content: space-between; margin: 16px 2px 6px; color: var(--muted-foreground); font-size: 10px; }
+.playlist-items { display: flex; flex-direction: column; gap: 3px; }
+
+.playlist-item {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  transition: background .2s ease, border-color .2s ease;
+}
+
+.playlist-item:hover { background: var(--glass-soft); }
+.playlist-item.selected { border-color: var(--glass-border); background: var(--glass-hover); }
+
+.playlist-select {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  min-width: 0;
+  gap: 9px;
+  padding: 8px 6px 8px 8px;
+  border-radius: 9px;
+  text-align: left;
+  background: transparent;
+}
+
+.playlist-index {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 25px;
+  height: 25px;
+  border-radius: 7px;
+  color: var(--muted-foreground);
+  background: var(--glass-soft);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.selected .playlist-index { color: var(--primary-foreground); background: var(--primary); }
+.playlist-name { display: flex; flex-direction: column; min-width: 0; gap: 4px; }
+
+.playlist-name strong {
+  overflow: hidden;
+  color: var(--foreground);
+  font-size: 11px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.playlist-name small { color: var(--muted-foreground); font-size: 10px; }
+
+.playlist-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 52px 20px;
+  color: var(--muted-foreground);
+  text-align: center;
+}
+
+.playlist-empty strong { color: var(--foreground); font-size: 12px; font-weight: 600; }
+.playlist-empty span { font-size: 10px; line-height: 1.5; }
+
+.settings-content { display: flex; flex-direction: column; gap: 16px; }
+.setting-section { padding-bottom: 14px; border-bottom: 1px solid var(--glass-border); }
+.section-heading { display: flex; align-items: center; gap: 7px; margin-bottom: 11px; }
+.section-heading h3 { margin: 0; font-size: 11px; font-weight: 600; }
+
+.section-icon {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  color: var(--foreground);
+  background: var(--glass-hover);
+}
+
+.setting-label { display: flex; align-items: center; justify-content: space-between; margin: 10px 0 6px; color: var(--muted-foreground); font-size: 10px; }
+.setting-label strong { color: var(--foreground); font-size: 11px; font-weight: 500; }
+
+.segmented-control { display: grid; gap: 4px; padding: 3px; border: 1px solid var(--glass-border); border-radius: 9px; background: var(--glass-soft); }
+.segmented-control.three { grid-template-columns: repeat(3, 1fr); }
+.segmented-control.two { grid-template-columns: repeat(2, 1fr); }
+
+.segmented-control button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 8px 5px;
+  border-radius: 6px;
+  color: var(--muted-foreground);
+  background: transparent;
+  font-size: 10px;
+  transition: color .2s ease, background .2s ease;
+}
+
+.segmented-control button.selected { color: var(--foreground); background: var(--glass-hover); }
+.range-setting input { width: 100%; margin: 3px 0 5px; background: linear-gradient(to right, var(--primary) var(--progress), var(--secondary) var(--progress)); }
+.mode-list { display: flex; flex-direction: column; gap: 3px; }
+
+.mode-list button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--muted-foreground);
+  background: transparent;
+  font-size: 11px;
+  text-align: left;
+  transition: color .2s ease, background .2s ease, border-color .2s ease;
+}
+
+.mode-list button span { display: flex; align-items: center; gap: 8px; }
+.mode-list button:hover { color: var(--foreground); background: var(--glass-soft); }
+.mode-list button.selected { border-color: var(--glass-border); color: var(--foreground); background: var(--glass-hover); }
+.mode-list button.selected > svg { color: var(--foreground); }
+
+.toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 10px 0; color: var(--muted-foreground); font-size: 10px; cursor: pointer; }
+
+.switch {
+  position: relative;
+  flex: 0 0 auto;
+  width: 33px;
+  height: 19px;
+  padding: 2px;
+  border: 0;
+  border-radius: 99px;
+  background: var(--secondary);
+  cursor: pointer;
+  transition: background .2s ease;
+}
+
+.switch span { display: block; width: 15px; height: 15px; border-radius: 50%; background: var(--muted-foreground); transition: transform .2s ease, background .2s ease; }
+.switch.checked { background: var(--primary); }
+.switch.checked span { transform: translateX(14px); background: var(--primary-foreground); }
+
+.clear-history { display: flex; align-items: center; gap: 7px; margin-top: 15px; padding: 0; color: var(--muted-foreground); background: transparent; font-size: 10px; transition: color .2s ease; }
+.clear-history:hover { color: var(--foreground); }
+
+.shortcut-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin: 7px 0; color: var(--muted-foreground); font-size: 10px; }
+.shortcut-row span { display: flex; flex-direction: column; gap: 3px; }
+.shortcut-row small { color: var(--muted-foreground); font-size: 9px; opacity: .8; }
+.shortcut-row > div { display: flex; gap: 3px; }
+
+kbd {
+  min-width: 24px;
+  padding: 4px 5px;
+  border: 1px solid var(--glass-border);
+  border-radius: 5px;
+  color: var(--foreground);
+  background: var(--glass-soft);
+  font-family: inherit;
+  font-size: 9px;
+  text-align: center;
+}
+
+.settings-footnote { display: flex; align-items: center; gap: 7px; color: var(--muted-foreground); font-size: 10px; line-height: 1.45; }
+
+/* ---------- update notice ---------- */
+
+.update-block { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin: 12px 0 4px; }
+
+.update-button {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 12px;
+  border: 1px solid var(--glass-border);
+  border-radius: 9px;
+  color: var(--foreground);
+  background: var(--glass-soft);
+  font-size: 11px;
+  cursor: pointer;
+  transition: background .2s ease, border-color .2s ease;
+}
+
+.update-button:hover:not(:disabled) { border-color: var(--glass-border-strong); background: var(--glass-hover); }
+.update-button:disabled { color: var(--muted-foreground); cursor: default; }
+
+.update-status { margin: 0; color: var(--muted-foreground); font-size: 10px; line-height: 1.5; }
+.update-status strong { color: var(--foreground); font-size: 11px; font-weight: 600; }
+.update-status.error { color: var(--destructive); }
+
+.changelog {
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  background: var(--glass-soft);
+}
+
+.changelog h4 { margin: 0 0 7px; color: var(--foreground); font-size: 11px; font-weight: 600; }
+.changelog h4.changelog-group { margin: 12px 0 6px; color: var(--muted-foreground); font-size: 10px; font-weight: 500; letter-spacing: .04em; }
+.changelog h4:first-child { margin-top: 0; }
+.changelog p, .changelog ul, .changelog ol { margin: 0 0 7px; color: var(--foreground); font-size: 11px; line-height: 1.55; }
+.changelog ul, .changelog ol { padding-left: 16px; }
+.changelog li + li { margin-top: 3px; }
+.changelog > :last-child { margin-bottom: 0; }
+.changelog strong { font-weight: 600; }
+.changelog code { padding: 1px 5px; border-radius: 5px; color: var(--foreground); background: var(--glass-hover); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; }
+.changelog hr { margin: 10px 0; border: 0; border-top: 1px solid var(--glass-border); }
+.changelog-link { text-decoration: underline dotted; text-underline-offset: 2px; cursor: help; }
+
+.toast {
+  position: absolute;
+  z-index: 30;
+  right: 50%;
+  bottom: 28px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 13px;
+  border: 1px solid var(--glass-border-strong);
+  border-radius: 9px;
+  color: var(--foreground);
+  background: var(--glass-strong);
+  box-shadow: var(--shadow);
+  font-size: 11px;
+  transform: translateX(50%);
+  backdrop-filter: blur(18px);
+  animation: toast-in .2s ease;
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translate(50%, 8px); }
+  to { opacity: 1; transform: translate(50%, 0); }
+}
+
+@media (max-width: 760px) {
+  .mirror-shell { min-width: 0; }
+  .titlebar { padding: 0 11px; }
+  .titlebar-center { display: none; }
+  .player-chrome { padding: 0 12px 13px; }
+  .volume-input { width: 48px; }
+  .side-panel { top: 7px; right: 7px; bottom: 7px; left: 7px; width: auto; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

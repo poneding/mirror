@@ -1,0 +1,302 @@
+# AGENTS.md
+
+Guidance for agents working in this repository.
+
+## What this project is
+
+**Mirror** — a cross-platform, offline, high-performance video player built with
+Rust (Tauri 2) and a React/TypeScript frontend. The product intent is a clean,
+minimal, frosted-glass interface: "like a clean mirror". The window sizes itself
+to the video's aspect ratio, IINA-style.
+
+The interface language is Chinese by default, with an English option.
+
+## Architecture
+
+Two processes, one window:
+
+```
+src-tauri/                     Rust: native shell
+  src/lib.rs                   Tauri commands + window setup (tested)
+  src/main.rs                  Entry point, delegates to mirror_lib::run()
+  tauri.conf.json              Window, bundle targets, updater endpoint + public key
+  capabilities/default.json    Permissions (core, dialog, updater)
+
+src/                           Frontend: WebView UI
+  App.tsx                      React component: state, effects, layout
+  lib/player.ts                Pure logic, no DOM/React/Tauri (unit tested)
+  lib/player.test.ts           Unit tests for lib/player.ts
+  lib/markdown.ts              Release notes → blocks for the update notice (unit tested)
+  styles.css                   CSS variables + frosted surfaces
+
+cliff.toml                     git-cliff config: the shape of the release notes
+scripts/set-version.mjs        Writes the release tag's version into the four files that carry it
+.github/workflows/release.yml  Builds, signs and publishes on a published release
+```
+
+The Rust layer only does what the WebView cannot: window sizing, pinning,
+fullscreen, native file dialogs, and OS blur (Acrylic/Vibrancy via
+`window-vibrancy`). Video decoding is delegated to the system WebView, so there
+is no bundled decoder.
+
+**Keep `lib/player.ts` free of React, DOM, and Tauri imports.** It must stay
+pure and directly unit-testable. If logic needs a side effect, put the effect in
+`App.tsx` and the decision in `lib/player.ts`. `lib/markdown.ts` follows the
+same rule: it parses text, `App.tsx` renders the blocks it returns.
+
+`fitWindowToVideo` in `src/lib/player.ts` and `fitted_size` in
+`src-tauri/src/lib.rs` implement the same algorithm in two languages. **If you
+change one, change the other.** Both have tests.
+
+## Commands
+
+Use the Makefile; run `make help` for the full list.
+
+| Command | Purpose |
+| --- | --- |
+| `make check` | Typecheck + lint everything (CI gate, no writes) |
+| `make lint` | ESLint + clippy (`-D warnings`) |
+| `make test` | Vitest + `cargo test` |
+| `make run` | Launch the desktop app (`tauri dev`) |
+| `make run-web` | Frontend only in a browser (fast UI iteration) |
+| `make build` | Frontend bundle |
+| `make build-app` | Full desktop binary + installers |
+| `make fmt` | `cargo fmt` |
+| `make coverage` | Coverage for `src/lib` |
+| `make audit` | `cargo audit` + `npm audit` |
+
+Before finishing any change, run at least `make check` and `make test`.
+
+### Makefile constraints
+
+The Makefile targets the actual development environment, verified:
+
+- **GNU Make 3.81** — no `.ONESHELL`, no `!=` assignment, no `.RECIPEPREFIX`
+  tricks.
+- The make shell is **Git Bash `sh`** — use POSIX syntax, not Bashisms.
+- **Each recipe line runs in its own shell.** Combine steps with `&&` or `;`
+  when they must share state, or split into separate lines that each stand alone.
+
+## Conventions
+
+**TypeScript**
+- Strict mode; avoid `any`.
+- Prefer small pure functions in `lib/player.ts` over inline logic in JSX.
+- `eslint-plugin-react-hooks` is enabled and treated as a real signal. If an
+  effect's dependency list looks wrong, fix the code — do not add
+  `eslint-disable`.
+
+**Rust**
+- `clippy` runs with `-D warnings`; warnings fail the build.
+- Validate inputs at the command boundary and return `Result<_, String>` for
+  anything the frontend can invoke.
+- Format with `cargo fmt` before finishing.
+
+**Tauri permissions**
+- `core:default` only grants *read-only* window access. Any window mutation
+  called from the frontend (`minimize`, `maximize`, `unmaximize`,
+  `toggle_maximize`, `close`, `start_dragging`, `set_size`, …) needs an explicit
+  `core:window:allow-*` entry in `src-tauri/capabilities/default.json`.
+- **The failure mode is silent.** These calls are wrapped in `.catch()` so a
+  missing permission is swallowed at runtime. If a window button or the titlebar
+  drag appears to do nothing, check the capability list first; the rejected
+  promise names the exact permission to add.
+- Adding a capability requires a Rust rebuild, not just a frontend reload.
+- Window sizing that Mirror needs is done by its own Rust command
+  (`resize_to_video`), so the JS `set_size` permission is intentionally absent.
+- The update check and install need `updater:default` (already granted). The
+  plugin reads `tauri.conf.json > plugins > updater` when the app starts, not
+  when it builds, so a malformed block fails at launch rather than at compile
+  time.
+
+**CSS**
+- Use the shadcn default (neutral) palette via CSS variables defined in
+  `:root`. Do not hardcode hex values in components.
+- Both light and dark themes must work; check `data-theme` selectors and the
+  `prefers-color-scheme` block for `system`.
+- Icons come from `lucide-react` only. No emoji as UI icons.
+- Scrollbars are styled through `::-webkit-scrollbar` only. Setting the standard
+  `scrollbar-color` / `scrollbar-width` properties makes Chromium ignore those
+  pseudo-elements outright and the native track frame comes back. Thumbs are
+  transparent until the scroll container is hovered, so panels stay quiet.
+- Keep frosted surfaces (`backdrop-filter`) on panels and overlays, never on the
+  element that covers playing video: blurring the picture both looks muddy and
+  costs frames.
+
+## Behaviour contracts
+
+These are specified by the product requirements. Changing them is a product
+decision, not an implementation detail.
+
+**Keyboard shortcuts**
+
+| Action | macOS | Windows / Linux |
+| --- | --- | --- |
+| Play / pause | `Space` | `Space` |
+| Seek | `←` `→` | `←` `→` |
+| Volume | `↑` `↓` | `↑` `↓` |
+| Previous / next | `⌘ ←` `⌘ →` | `Alt ←` `Alt →` |
+| Playback speed | `⌘ ↑` `⌘ ↓` | `Alt ↑` `Alt ↓` |
+| Fullscreen | `Enter` | `Enter` |
+| Settings panel | `⌘ ,` | `Ctrl ,` |
+| Playlist panel | `⌘ P` | `Ctrl P` |
+
+Note the modifier split: on macOS track/speed use **cmd**, on Windows/Linux they
+use **alt**. Panel shortcuts use **cmd**/**ctrl**. This is implemented in
+`resolveShortcut` and covered by tests — do not "simplify" it to one modifier.
+
+`Esc` precedence: settings panel → playlist panel → exit fullscreen.
+
+Shortcuts must never fire while a text input, textarea, or select has focus
+(`isTypingTarget`), with `Esc` as the only exception.
+
+**Playback-end modes** (`playbackMode`): `pause` stops, `playlist` advances then
+stops at the end, `single` repeats one item, `list` wraps forever. See
+`resolveEndedAction`.
+
+**Window sizing**: the window always matches the video aspect ratio. Scale is
+applied uniformly; constraints change overall size, never a single axis.
+Independent per-axis clamping distorts extreme ratios (32:9, tall portrait) —
+this was a real bug, now covered by tests in both languages. If a ratio is too
+extreme to satisfy both the minimums and maximums, the **maximums win** so the
+window still fits on screen.
+
+**Window controls**: the window is undecorated (`decorations: false`), so the
+minimise/maximise/close buttons are ours to draw. Windows/Linux get all three;
+macOS keeps minimise + close. The glyph follows the real window state, synced
+through `onResized` so it stays correct when the window is maximised by another
+route (double-click, OS shortcut).
+
+**Control bar layout**: volume on the left, transport (previous / play / next)
+truly centred, playback speed and panel toggles on the right. The centring uses
+a `1fr auto 1fr` grid, so the transport stays centred regardless of how wide the
+side groups get — do not replace it with `justify-content: space-between`.
+Seeking lives on the arrow keys and the progress bar, not on dedicated buttons.
+
+**Status indicator (OSD)**: play/pause, volume and playback-rate changes briefly
+show a frosted pill near the top of the interface, for `OSD_DURATION_MS`.
+Deliberate constraints:
+
+- It is a sibling of the auto-hiding chrome, not a child, so feedback stays
+  visible while the titlebar and control bar are hidden.
+- It must only fire from user-initiated actions with a *known new value*.
+  Firing it from an effect (for example when `volume` changes) would also fire on
+  load and on every unrelated re-render.
+- Actions without a visible value change (fullscreen) do not announce.
+
+## Release and updates
+
+A GitHub release is the only trigger; pushing to `main` publishes nothing.
+
+1. Tag `v1.2.3` (SemVer; `v1.2.3-rc.1` for a prerelease) and publish a release
+   for that tag.
+2. `.github/workflows/release.yml` rejects non-SemVer tags, stamps the version
+   into `package.json`, `package-lock.json`, `src-tauri/tauri.conf.json` and
+   `src-tauri/Cargo.toml`, writes the git-cliff changelog into the release body,
+   then builds and signs every desktop target and uploads the bundles plus
+   `latest.json`.
+3. That body *is* the changelog the app shows: `latest.json` carries it as
+   `notes`, and the update notice renders it through `lib/markdown.ts` as
+   elements — release notes are remote text, so they are never injected as HTML.
+
+Three things must stay in step or updates break, and none of them fail at build
+or test time:
+
+- The tag is the single source of truth for the version. Editing a version
+  literal by hand makes `tauri.conf.json`, `Cargo.toml` and the tag drift; use
+  `node scripts/set-version.mjs v1.2.3`.
+- `plugins > updater > pubkey` must be the public half of the private key in the
+  `TAURI_SIGNING_PRIVATE_KEY` repository secret. The bundler only *warns* on a
+  mismatch; the app then refuses the update forever.
+- `plugins > updater > endpoints` must point at this repository's
+  `releases/latest/download/latest.json`.
+
+Commit subjects drive the changelog, so keep them Conventional
+(`feat`/`fix`/`perf`/`refactor`/`docs`); `cliff.toml` filters out
+`chore`, `ci`, `style` and `test`.
+
+## Persistence
+
+All settings live in `localStorage` under the keys in `STORAGE_KEYS`
+(`lib/player.ts`) — use those constants, never string literals.
+
+Two rules matter:
+
+1. **A missing key must return its default.** `Number(null)` is `0`, so reading
+   a number with `Number(store.getItem(key))` silently forces the minimum. This
+   was a real bug (volume defaulted to 0). Use `getInitialNumber`.
+2. **`blob:` sources cannot survive a reload.** The browser preview uses blob
+   URLs; the packaged app uses `asset://` URLs which persist. `parseStoredPlaylist`
+   drops blob entries so a restart never shows dead rows. Verified by tests.
+
+## Verification expectations
+
+- New logic in `lib/player.ts` needs unit tests. The suite is mutation-tested:
+  it catches off-by-one wrap, wrong modifiers, bad clamps, and broken aspect
+  ratios. A test that cannot fail is not useful.
+- For UI or playback changes, verify against a **real video file** in a browser
+  (`make run-web` — drag a file onto the window) since jsdom cannot decode video.
+- For window/native changes, verify in the actual Tauri window, not just the
+  browser preview. The browser fallback path differs from the native path.
+
+To drive the real Tauri window for verification, launch with WebView2 remote
+debugging enabled:
+
+```sh
+WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS="--remote-debugging-port=9222" \
+  ./src-tauri/target/debug/mirror.exe
+```
+
+Then attach over CDP at `http://127.0.0.1:9222` (Playwright's
+`chromium.connectOverCDP`, or `curl http://127.0.0.1:9222/json` to list pages).
+Confirm the page URL is `http://tauri.localhost/` so you know you reached the
+native webview and not a browser tab.
+
+Generate test media with ffmpeg:
+
+```sh
+ffmpeg -y -f lavfi -i "testsrc=size=1920x1080:rate=30:duration=6" \
+  -f lavfi -i "sine=frequency=440:duration=6" \
+  -c:v libx264 -pix_fmt yuv420p -c:a aac -shortest sample-1080p.mp4
+```
+
+Useful shapes: `1920x1080`, `1280x720`, `720x1280`, `2560x1080`. A solid-colour
+clip (`-f lavfi -i "color=c=0x008000:size=1920x1080"`) makes letterboxing and
+frame coverage obvious.
+
+Clean up scratch directories when done; `.tmp-*` and `tmp-*` are git-ignored and
+excluded from lint.
+
+## Known limitations
+
+Do not present these as finished:
+
+- Nothing is code-signed: there is no Apple Developer ID or Windows
+  Authenticode certificate, so the OS warns on first launch. CI produces a
+  Windows NSIS installer, a Linux AppImage and `.deb`, and macOS `.app` + `.dmg`
+  (arm64 and x86_64); MSI and `.rpm` are not built.
+- The icons are generated from the 256×256 `src-tauri/icons/icon.png`, so they
+  are upscaled and slightly soft. Replace it with a 1024×1024 source and run
+  `npm run tauri icon` to improve them.
+- Update checks only find releases published through the workflow (they need
+  `latest.json`); a wrong repository in `endpoints` shows up as a failed check in
+  the settings panel.
+- Playback depends on system WebView codecs. Some `mkv` encodes will not play
+  where the OS lacks the codec — this is expected, not a bug to chase.
+- The playlist is flat with no reordering and no persisted playback position per
+  item beyond the single most recent entry.
+- Panels occupy one shared slot, so settings and playlist are mutually
+  exclusive. The `Esc` ordering between them is therefore not independently
+  observable in practice.
+
+## Do not
+
+- Do not add a bundled video decoder or FFmpeg dependency without discussion;
+  delegating to the system WebView is a deliberate tradeoff.
+- Do not add networking, telemetry, or analytics. The product is explicitly
+  offline-first: "nothing leaves your device". The one request Mirror makes is
+  the update check, which asks this project's own GitHub release for
+  `latest.json` and only runs while the user leaves "check for updates" on. Keep
+  it that way: nothing about the user or their media may ever be sent.
+- Do not hardcode colours outside the CSS variable set.
+- Do not suppress lint warnings to make a gate pass; fix the cause.

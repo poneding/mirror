@@ -1,0 +1,59 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Mirror",
+  "version": "0.1.0",
+  "identifier": "com.mirror.player",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build",
+    "devUrl": "http://localhost:1420",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Mirror",
+        "width": 1120,
+        "height": 700,
+        "minWidth": 640,
+        "minHeight": 360,
+        "decorations": false,
+        "transparent": true,
+        "shadow": true,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["**"]
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "createUpdaterArtifacts": true,
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "category": "Entertainment",
+    "publisher": "Mirror",
+    "shortDescription": "A clean, offline video player"
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/poneding/mirror/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDU1MUFDMTlDMDQzNDc2QjcKUldTM2RqUUVuTUVhVllxdXJvUW9XckxtNmJhQnhLOGd6cDBTVFV1dXF2ak8wQmdNK2t1OEtXZksK"
+    }
+  }
+}

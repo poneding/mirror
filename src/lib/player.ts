@@ -1,0 +1,401 @@
+/**
+ * Pure, side-effect-free helpers for Mirror.
+ *
+ * Everything here is deliberately free of DOM/React/Tauri access so it can be
+ * unit tested directly. Effects that touch `localStorage`, the video element or
+ * the Rust command bridge stay in `App.tsx`.
+ */
+
+export type MediaItem = {
+  id: string;
+  name: string;
+  path: string;
+  source: string;
+  duration: number;
+  width?: number;
+  height?: number;
+};
+
+export type Theme = "dark" | "light" | "system";
+export type Language = "zh" | "en";
+export type PlaybackMode = "pause" | "playlist" | "single" | "list";
+export type Panel = "settings" | "playlist" | null;
+
+export const SUPPORTED_VIDEO_EXTENSIONS = ["mp4", "mkv", "webm", "mov", "avi", "m4v"];
+
+export const SPEED_STEPS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
+
+export const SEEK_STEP_MIN = 5;
+export const SEEK_STEP_MAX = 60;
+
+/** Storage keys, centralised so the Makefile/docs and tests agree on them. */
+export const STORAGE_KEYS = {
+  theme: "mirror-theme",
+  language: "mirror-language",
+  playbackMode: "mirror-playback-mode",
+  seekStep: "mirror-seek-step",
+  speed: "mirror-speed",
+  volume: "mirror-volume",
+  playlist: "mirror-playlist",
+  activeId: "mirror-active",
+  autoUpdate: "mirror-auto-update",
+  autoClearHistory: "mirror-auto-clear-history",
+  history: "mirror-history",
+} as const;
+
+/** Minimal read/write surface so tests can pass a fake store instead of jsdom. */
+export type KeyValueStore = {
+  getItem: (key: string) => string | null;
+};
+
+export function formatTime(value: number): string {
+  if (!Number.isFinite(value) || value < 0) return "00:00";
+  const totalSeconds = Math.floor(value);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return hours > 0
+    ? `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`
+    : `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+/** Handles both POSIX and Windows separators. */
+export function fileNameFromPath(path: string): string {
+  return path.split(/[\\/]/).pop() || "Untitled video";
+}
+
+export function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.min(maximum, Math.max(minimum, value));
+}
+
+export function extensionOf(name: string): string {
+  const index = name.lastIndexOf(".");
+  if (index <= 0 || index === name.length - 1) return "";
+  return name.slice(index + 1).toLowerCase();
+}
+
+export function isSupportedVideo(name: string): boolean {
+  const extension = extensionOf(name);
+  // A selection without an extension is allowed through; the media element
+  // decides whether it can actually be decoded.
+  return extension === "" || SUPPORTED_VIDEO_EXTENSIONS.includes(extension);
+}
+
+export function getInitialTheme(store: KeyValueStore): Theme {
+  const stored = store.getItem(STORAGE_KEYS.theme);
+  return stored === "dark" || stored === "light" || stored === "system" ? stored : "dark";
+}
+
+export function getInitialLanguage(store: KeyValueStore): Language {
+  return store.getItem(STORAGE_KEYS.language) === "en" ? "en" : "zh";
+}
+
+export function getInitialPlaybackMode(store: KeyValueStore): PlaybackMode {
+  const stored = store.getItem(STORAGE_KEYS.playbackMode);
+  return stored === "playlist" || stored === "single" || stored === "list" ? stored : "pause";
+}
+
+export function getInitialBoolean(store: KeyValueStore, key: string, fallback: boolean): boolean {
+  const stored = store.getItem(key);
+  return stored === null ? fallback : stored === "true";
+}
+
+/**
+ * Reads a persisted number, clamping it into range.
+ *
+ * A missing key must yield the fallback. Treating `Number(null)` (which is `0`)
+ * as a valid value silently forced volume/speed/seekStep to their minimums.
+ */
+export function getInitialNumber(
+  store: KeyValueStore,
+  key: string,
+  fallback: number,
+  minimum: number,
+  maximum: number,
+): number {
+  const stored = store.getItem(key);
+  if (stored === null) return fallback;
+  const parsed = Number(stored);
+  return Number.isFinite(parsed) ? clamp(parsed, minimum, maximum) : fallback;
+}
+
+/** Restores a playlist, dropping entries that cannot outlive a restart. */
+export function parseStoredPlaylist(raw: string | null): MediaItem[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return (parsed as MediaItem[]).filter(
+      (item) =>
+        item &&
+        typeof item.id === "string" &&
+        typeof item.name === "string" &&
+        typeof item.source === "string" &&
+        item.source.length > 0 &&
+        !item.source.startsWith("blob:"),
+    );
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Picks the id that should be active for a playlist.
+ *
+ * Falls back to the first item when the previous selection is gone, and to
+ * `null` when the playlist is empty.
+ */
+export function resolveActiveId(items: MediaItem[], activeId: string | null): string | null {
+  if (items.length === 0) return null;
+  if (activeId && items.some((item) => item.id === activeId)) return activeId;
+  return items[0].id;
+}
+
+/** Wraps around in both directions, so prev at index 0 lands on the last item. */
+export function nextIndex(current: number, length: number, direction: 1 | -1): number {
+  if (length <= 0) return 0;
+  return (current + direction + length) % length;
+}
+
+export function stepSpeed(current: number, direction: 1 | -1): number {
+  const index = SPEED_STEPS.indexOf(current);
+  const next = nextIndex(index === -1 ? 2 : index, SPEED_STEPS.length, direction);
+  return SPEED_STEPS[next];
+}
+
+export type EndedAction =
+  | { kind: "repeat" }
+  | { kind: "advance"; id: string }
+  | { kind: "stop" };
+
+/**
+ * Decides what happens when the current track ends.
+ *
+ * - `single`: replay the same track (handled by the caller resetting time).
+ * - `playlist`: advance only while items remain, then stop.
+ * - `list`: advance and wrap around forever.
+ * - `pause`: stop.
+ */
+export function resolveEndedAction(
+  items: MediaItem[],
+  activeId: string | null,
+  mode: PlaybackMode,
+): EndedAction {
+  if (mode === "single") return { kind: "repeat" };
+
+  const current = items.findIndex((item) => item.id === activeId);
+  if (current === -1) return { kind: "stop" };
+
+  if (mode === "playlist") {
+    const next = current + 1;
+    return next < items.length ? { kind: "advance", id: items[next].id } : { kind: "stop" };
+  }
+
+  if (mode === "list" && items.length > 0) {
+    return { kind: "advance", id: items[nextIndex(current, items.length, 1)].id };
+  }
+
+  return { kind: "stop" };
+}
+
+export type Platform = "mac" | "windows" | "linux";
+
+export function detectPlatform(userAgent: string, platform: string): Platform {
+  const probe = `${platform} ${userAgent}`;
+  if (/Mac|iPhone|iPad|iPod/i.test(probe)) return "mac";
+  if (/Win/i.test(probe)) return "windows";
+  return "linux";
+}
+
+export type ShortcutCommand =
+  | { type: "escape" }
+  | { type: "toggle-play" }
+  | { type: "seek"; amount: 1 | -1 }
+  | { type: "volume"; amount: 1 | -1 }
+  | { type: "track"; direction: 1 | -1 }
+  | { type: "speed"; direction: 1 | -1 }
+  | { type: "fullscreen" }
+  | { type: "panel"; panel: Exclude<Panel, null> };
+
+export type ShortcutKeyEvent = {
+  key: string;
+  code?: string;
+  metaKey?: boolean;
+  ctrlKey?: boolean;
+  altKey?: boolean;
+  shiftKey?: boolean;
+};
+
+/**
+ * Maps a key event to a player command, applying the platform-specific
+ * modifier layout:
+ *
+ *   macOS          cmd + arrows  -> prev/next, cmd + up/down -> speed
+ *   Windows/Linux  alt + arrows  -> prev/next, alt + up/down -> speed
+ *
+ * Returns `null` for anything that is not a Mirror shortcut, so the caller can
+ * leave the event alone.
+ */
+export function resolveShortcut(
+  event: ShortcutKeyEvent,
+  platform: Platform,
+): ShortcutCommand | null {
+  const command = platform === "mac" ? Boolean(event.metaKey) : Boolean(event.ctrlKey);
+  const trackModifier = platform === "mac" ? Boolean(event.metaKey) : Boolean(event.altKey);
+  const speedModifier = trackModifier;
+
+  if (event.key === "Escape") return { type: "escape" };
+
+  if (event.key === " " || event.code === "Space") return { type: "toggle-play" };
+
+  if (event.key === "Enter") return { type: "fullscreen" };
+
+  if (trackModifier) {
+    if (event.key === "ArrowRight") return { type: "track", direction: 1 };
+    if (event.key === "ArrowLeft") return { type: "track", direction: -1 };
+    if (speedModifier && event.key === "ArrowUp") return { type: "speed", direction: 1 };
+    if (speedModifier && event.key === "ArrowDown") return { type: "speed", direction: -1 };
+  }
+
+  if (event.key === "ArrowRight") return { type: "seek", amount: 1 };
+  if (event.key === "ArrowLeft") return { type: "seek", amount: -1 };
+  if (event.key === "ArrowUp") return { type: "volume", amount: 1 };
+  if (event.key === "ArrowDown") return { type: "volume", amount: -1 };
+
+  if (command && event.key === ",") return { type: "panel", panel: "settings" };
+  if (command && event.key.toLowerCase() === "p") return { type: "panel", panel: "playlist" };
+
+  return null;
+}
+
+export type EscapeOutcome =
+  | { handled: true; close: Exclude<Panel, null> }
+  | { handled: true; exitFullscreen: true }
+  | { handled: false };
+
+/**
+ * Escape precedence: settings panel, then playlist panel, then fullscreen.
+ *
+ * The settings-before-playlist ordering is stated by the product spec. Mirror
+ * renders both panels into a single slot, so at most one is ever open; the
+ * ordering is therefore equivalent in practice and kept for clarity and in case
+ * the panels ever become independent.
+ */
+export function resolveEscape(panel: Panel, isFullscreen: boolean): EscapeOutcome {
+  if (panel === "settings") return { handled: true, close: "settings" };
+  if (panel === "playlist") return { handled: true, close: "playlist" };
+  if (isFullscreen) return { handled: true, exitFullscreen: true };
+  return { handled: false };
+}
+
+/** Where the keyboard event came from matters: never hijack text entry. */
+export function isTypingTarget(tagName: string): boolean {
+  return tagName === "INPUT" || tagName === "SELECT" || tagName === "TEXTAREA";
+}
+
+export type WatchHistory = {
+  id: string;
+  name: string;
+  position: number;
+  updatedAt: number;
+};
+
+export function parseStoredHistory(raw: string | null): WatchHistory | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Partial<WatchHistory>;
+    if (typeof parsed.id !== "string" || typeof parsed.position !== "number") return null;
+    if (!Number.isFinite(parsed.position) || parsed.position < 0) return null;
+    return {
+      id: parsed.id,
+      name: typeof parsed.name === "string" ? parsed.name : "",
+      position: parsed.position,
+      updatedAt: typeof parsed.updatedAt === "number" ? parsed.updatedAt : 0,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resumes a saved position only when it still makes sense for this item and it
+ * is not effectively at the end of the video.
+ */
+export function resumePosition(history: WatchHistory | null, activeId: string | null, duration: number): number {
+  if (!history || !activeId || history.id !== activeId) return 0;
+  if (!Number.isFinite(duration) || duration <= 0) return 0;
+  if (history.position >= duration - 2) return 0;
+  return history.position;
+}
+
+/** Max chrome opacity timer while playing. */
+export const CHROME_HIDE_DELAY_MS = 2800;
+
+/** How long the transient status indicator stays on screen. */
+export const OSD_DURATION_MS = 1000;
+
+export const HISTORY_WRITE_INTERVAL_MS = 4000;
+
+/** Initial window size target, and the bounds the aspect fitter respects. */
+export const WINDOW_FIT: {
+  targetWidth: number;
+  minWidth: number;
+  minHeight: number;
+  maxWidth: number;
+  maxHeight: number;
+} = {
+  targetWidth: 1120,
+  minWidth: 640,
+  minHeight: 360,
+  maxWidth: 1920,
+  maxHeight: 1200,
+};
+
+export type WindowSize = { width: number; height: number };
+
+/**
+ * Computes the window size that matches a video's aspect ratio.
+ *
+ * The aspect ratio is authoritative: the window must always match the picture
+ * shape. Scale is therefore applied uniformly, and constraints only ever change
+ * the overall size, never one axis on its own.
+ *
+ * Rules, in order:
+ *   1. Start at the target width and derive the height from the video aspect.
+ *   2. Grow uniformly to satisfy the minimums when the maximums still allow it.
+ *   3. Never exceed the maximums; for ratios too extreme to satisfy both, the
+ *      maximums win so the window still fits on screen.
+ *
+ * Clamping the axes independently (as `Math.max(width, min)` per axis does)
+ * silently distorts the picture shape for extreme ratios such as 32:9 or tall
+ * portrait video.
+ *
+ * Mirrors `resize_to_video` in `src-tauri/src/lib.rs`; both are covered by
+ * tests so the native and preview paths stay in agreement.
+ */
+export function fitWindowToVideo(videoWidth: number, videoHeight: number): WindowSize | null {
+  if (!Number.isFinite(videoWidth) || !Number.isFinite(videoHeight)) return null;
+  if (videoWidth <= 0 || videoHeight <= 0) return null;
+
+  const aspect = videoWidth / videoHeight;
+
+  let width = WINDOW_FIT.targetWidth;
+  let height = width / aspect;
+
+  // Grow uniformly to honour the minimums, but only as far as the maximums allow.
+  const growToMinimum = Math.max(
+    WINDOW_FIT.minWidth / width,
+    WINDOW_FIT.minHeight / height,
+    1,
+  );
+  const growthAllowed = Math.min(
+    WINDOW_FIT.maxWidth / width,
+    WINDOW_FIT.maxHeight / height,
+  );
+  const growth = Math.min(growToMinimum, growthAllowed);
+
+  width *= growth;
+  height *= growth;
+
+  return { width, height };
+}

@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+coverage/
+src-tauri/target/
+src-tauri/gen/
+
+# Local scratch directories used for manual/visual verification
+tmp-*/
+.tmp-*/
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp

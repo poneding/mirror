@@ -1,0 +1,136 @@
+# Publishing pipeline. A published GitHub release is the only trigger — pushes
+# to main never publish anything.
+#
+#   changelog  turns the release tag into the app version and writes the
+#              git-cliff changelog into the release body. That body is also the
+#              `notes` field the updater serves to installed apps, so the
+#              in-app update notice shows the same text.
+#   build      builds, signs and attaches the desktop bundles for every
+#              platform, plus latest.json for the updater.
+#
+# One-time setup is in README.md (signing key + TAURI_SIGNING_PRIVATE_KEY
+# repository secret).
+
+name: Release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  changelog:
+    name: Changelog
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.tag.outputs.version }}
+      changelog: ${{ steps.cliff.outputs.content }}
+    steps:
+      - name: Checkout the release tag
+        uses: actions/checkout@v7
+        with:
+          # git-cliff walks the tagged history, so it wants every commit and tag.
+          fetch-depth: 0
+
+      - name: Check the tag is SemVer
+        id: tag
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          if [[ ! "$TAG" =~ ^v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Release tag '$TAG' is not SemVer. Publish releases as v1.2.3, or v1.2.3-rc.1 for a prerelease."
+            exit 1
+          fi
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Generate the changelog
+        id: cliff
+        uses: orhun/git-cliff-action@v4
+        with:
+          config: cliff.toml
+          # --current: the commits belonging to the tag being released. It fails
+          # loudly if that tag is not the newest one reachable from the checkout
+          # (re-running an old release after a newer one exists) rather than
+          # silently writing another release's notes into the body.
+          args: --current
+        env:
+          OUTPUT: CHANGELOG.md
+
+      - name: Write the changelog into the release body
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: gh release edit "$TAG" --notes-file CHANGELOG.md
+
+  build:
+    name: Build ${{ matrix.label }}
+    needs: changelog
+    strategy:
+      # A broken target must not cancel the others: every job uploads to the
+      # same release and re-running a single job is expected.
+      fail-fast: false
+      matrix:
+        include:
+          - label: macOS (Apple silicon)
+            platform: macos-latest
+            args: --target aarch64-apple-darwin --bundles app,dmg
+          - label: macOS (Intel)
+            platform: macos-latest
+            args: --target x86_64-apple-darwin --bundles app,dmg
+          - label: Linux
+            platform: ubuntu-22.04
+            args: --bundles appimage,deb
+          - label: Windows
+            platform: windows-latest
+            args: --bundles nsis
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - name: Checkout the release tag
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Cache the Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install Linux webview dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xdg-utils
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Stamp the release version
+        run: node scripts/set-version.mjs "${{ needs.changelog.outputs.version }}"
+
+      - name: Build and attach the bundles
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          # Signs the updater artifacts. The matching public key is
+          # `plugins > updater > pubkey` in src-tauri/tauri.conf.json.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ github.event.release.tag_name }}
+          # The action rewrites the name and body of an existing release, so it
+          # is handed back exactly what the changelog job wrote.
+          releaseName: ${{ github.event.release.name || github.event.release.tag_name }}
+          releaseBody: ${{ needs.changelog.outputs.changelog }}
+          releaseDraft: false
+          args: ${{ matrix.args }}
