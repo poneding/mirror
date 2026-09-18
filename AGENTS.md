@@ -150,6 +150,10 @@ use **alt**. Panel shortcuts use **cmd**/**ctrl**. This is implemented in
 Shortcuts must never fire while a text input, textarea, or select has focus
 (`isTypingTarget`), with `Esc` as the only exception.
 
+The settings panel lists **only the bindings for the platform it is running on**
+(`shortcutKeys` + `SHORTCUT_ORDER`), so the keys shown always match the keys that
+work. Do not reintroduce a row per platform.
+
 **Playback-end modes** (`playbackMode`): `pause` stops, `playlist` advances then
 stops at the end, `single` repeats one item, `list` wraps forever. See
 `resolveEndedAction`.
@@ -161,6 +165,22 @@ this was a real bug, now covered by tests in both languages. If a ratio is too
 extreme to satisfy both the minimums and maximums, the **maximums win** so the
 window still fits on screen.
 
+**The picture is never cropped.** `fitWindowToVideo` only sizes the window when
+Mirror loads a file; it does not constrain later drags, and Tauri 2 / tao 0.35
+expose no `set_aspect_ratio`, so the user can always make the window a different
+shape from the video. The picture must then be letterboxed in full, never cut.
+That makes the CSS load-bearing: `.video-element` needs `min-width: 0;
+min-height: 0;` because a `<video>` is a replaced element and, as a grid item of
+`.stage`, its automatic minimum size is its intrinsic size. Without those two
+declarations `height: 100%` loses to the intrinsic height, the element overflows
+the stage, and `.stage { overflow: hidden }` crops the top and bottom off. The
+zero minimums are the fix, not a workaround — `object-fit: contain` can only
+letterbox inside an element that is allowed to be smaller than the picture.
+`src/lib/aspect.test.ts` reads `src/styles.css` and fails if either declaration
+disappears, so this cannot regress silently. Padding the `resize_to_video`
+command with chrome insets would **not** help: it offsets the space needed, it
+does not stop the crop.
+
 **Window controls**: the window is undecorated (`decorations: false`), so the
 minimise/maximise/close buttons are ours to draw. Windows/Linux get all three;
 macOS keeps minimise + close. The glyph follows the real window state, synced
@@ -168,10 +188,37 @@ through `onResized` so it stays correct when the window is maximised by another
 route (double-click, OS shortcut).
 
 **Control bar layout**: volume on the left, transport (previous / play / next)
-truly centred, playback speed and panel toggles on the right. The centring uses
-a `1fr auto 1fr` grid, so the transport stays centred regardless of how wide the
+truly centred, playback speed and fullscreen on the right. The centring uses a
+`1fr auto 1fr` grid, so the transport stays centred regardless of how wide the
 side groups get — do not replace it with `justify-content: space-between`.
 Seeking lives on the arrow keys and the progress bar, not on dedicated buttons.
+The play/pause button is a circle.
+
+**The video picture is not a control.** Clicking it must not toggle playback;
+resuming is the play button, the centre overlay, `Space`, or the media keys.
+`cursor: pointer` on `.video-element` would advertise otherwise — keep it
+`default`.
+
+**Settings panel**: sections are 外观 / 播放 / 更新 / 快捷键 / 关于. Section icons are
+plain glyphs with no badge behind them. The update check button sits on the
+section title row (via the `action` slot of `SettingSection`), the auto-check
+preference in the body. Playback speed, theme, and language are dropdowns.
+
+**Combobox** (`Combobox` in `App.tsx`): a listbox-style dropdown used for the
+speed, theme, and language choices. Three rules matter:
+
+- The trigger keeps focus and the active option is tracked with
+  `aria-activedescendant`; options are never focusable. This keeps `Tab` order
+  short and avoids focus juggling.
+- **Keys it handles must `stopPropagation`**, because the global shortcut
+  listener sits on `window`: without it, `Space` would also toggle playback and
+  the arrows would also change the volume.
+- `Esc` closes the open list without closing the panel, which is why it stops
+  propagation only while `open`.
+
+**Playback rate** is a fixed ladder (`SPEED_STEPS`). Values are snapped with
+`snapSpeed` on load so a legacy or hand-edited stored rate always has a matching
+entry to display.
 
 **Status indicator (OSD)**: play/pause, volume and playback-rate changes briefly
 show a frosted pill near the top of the interface, for `OSD_DURATION_MS`.
@@ -239,18 +286,35 @@ Two rules matter:
 - For window/native changes, verify in the actual Tauri window, not just the
   browser preview. The browser fallback path differs from the native path.
 
-To drive the real Tauri window for verification, launch with WebView2 remote
-debugging enabled:
+To drive the real Tauri window for verification, enable WebView2 remote
+debugging in `src-tauri/tauri.conf.json`:
 
-```sh
-WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS="--remote-debugging-port=9222" \
-  ./src-tauri/target/debug/mirror.exe
+```json
+"app": { "windows": [ { "additionalBrowserArgs":
+  "--remote-debugging-port=9222 --disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection" } ] }
 ```
+
+WebView2 ignores the `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` environment
+variable here because `wry` 0.55 sets `ICoreWebView2EnvironmentOptions`
+`AdditionalBrowserArguments` in code; when that property is set it wins and the
+environment variable is dropped. Passing the args through the config is the only
+reliable route, and it needs a Rust rebuild. `wry` also replaces the default
+args when this is set, so keep the three `--disable-features` values above.
+**Revert the entry after verifying** — a shipped build must not open a debugging
+port.
 
 Then attach over CDP at `http://127.0.0.1:9222` (Playwright's
 `chromium.connectOverCDP`, or `curl http://127.0.0.1:9222/json` to list pages).
-Confirm the page URL is `http://tauri.localhost/` so you know you reached the
-native webview and not a browser tab.
+Under `tauri dev` the page URL is `http://localhost:1420/`; a production build
+serves `http://tauri.localhost/`. Check the URL either way, so you know you
+reached the native webview and not a browser tab.
+
+Resizing a live window: `Browser.getWindowForTarget` + `Browser.setWindowBounds`
+changes the real window size for real, and `Page.captureScreenshot` shows what
+the user actually sees — enough to measure picture coverage and to see cropping
+in the pixels. This is how the "adjusting the width crops the picture" bug was
+diagnosed and confirmed fixed; do not accept a layout claim that was only
+reasoned about.
 
 Generate test media with ffmpeg:
 
@@ -267,6 +331,14 @@ frame coverage obvious.
 Clean up scratch directories when done; `.tmp-*` and `tmp-*` are git-ignored and
 excluded from lint.
 
+## Application logo
+
+`src/assets/logo.svg` is the editable vector master; its neutral palette lives
+in the SVG CSS variables. Run `make icons` after changing it. This uses the
+installed Tauri CLI to regenerate `src/assets/logo.png`, the 1024×1024
+`src-tauri/icons/icon.png`, and all desktop PNG/ICO/ICNS sizes without adding
+a dependency. Do not hand-edit the generated bitmaps or upscale a small PNG.
+
 ## Known limitations
 
 Do not present these as finished:
@@ -275,9 +347,6 @@ Do not present these as finished:
   Authenticode certificate, so the OS warns on first launch. CI produces a
   Windows NSIS installer, a Linux AppImage and `.deb`, and macOS `.app` + `.dmg`
   (arm64 and x86_64); MSI and `.rpm` are not built.
-- The icons are generated from the 256×256 `src-tauri/icons/icon.png`, so they
-  are upscaled and slightly soft. Replace it with a 1024×1024 source and run
-  `npm run tauri icon` to improve them.
 - Update checks only find releases published through the workflow (they need
   `latest.json`); a wrong repository in `endpoints` shows up as a failed check in
   the settings panel.

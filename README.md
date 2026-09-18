@@ -45,6 +45,20 @@ npm test
 | 测试 | Vitest (jsdom) + `cargo test` | `src/lib` 纯逻辑双端覆盖 |
 | Lint | ESLint (typescript-eslint) + clippy `-D warnings` | 告警即失败 |
 
+## 应用 Logo
+
+<img src="src/assets/logo.svg" alt="Mirror 应用 Logo" width="96" height="96" />
+
+银白镜面、石墨色播放切面，以及左侧更轻的磨砂倒影。图形保持中性配色，
+透明圆角外沿可用于深浅背景；不将文字塞进小尺寸应用图标。
+
+- [设计预览](design-system/mirror/brand/preview.html)：深浅背景与 16–96 px 尺寸对照。
+- 矢量源稿：`src/assets/logo.svg`，颜色集中在 SVG 的 CSS 变量中。
+- 首页图标：`src/assets/logo.png`（256×256）。
+- 高清母版：`src-tauri/icons/icon.png`（1024×1024），其余 PNG / ICO / ICNS 同步生成。
+
+修改源稿后运行 `make icons`，无需新增依赖。不要从小图反向放大生成应用图标。
+
 ## 快捷键
 
 | 功能 | macOS | Windows / Linux |
@@ -109,6 +123,8 @@ TAURI_SIGNING_PRIVATE_KEY=~/.tauri/mirror.key TAURI_SIGNING_PRIVATE_KEY_PASSWORD
 ## 窗口比例
 
 窗口始终匹配视频宽高比。缩放是等比进行的，约束只改变整体尺寸，绝不会单独改某一轴——按轴独立 clamp 会扭曲 32:9 或竖屏等极端比例。`fitWindowToVideo`（TypeScript）与 `fitted_size`（Rust）是同一算法的两份实现，两端均有测试；修改其一请同步另一个。
+
+比例只决定窗口**初始**尺寸，它不锁定拖动。用户拖出的窗口形状可以与视频不同（Tauri 2 / tao 0.35 没有 `set_aspect_ratio`），此时画面必须完整留黑边显示，绝不能被裁掉。这靠 `.video-element` 的 `min-width: 0; min-height: 0;` 保证：`<video>` 是替换元素，作为 `.stage` 的 grid 子项时自动最小尺寸等于其固有尺寸，缺了这两条声明就会溢出并被 `overflow: hidden` 裁掉上下边缘（正是“调整窗口宽度后画面被遮挡”的原因）。`src/lib/aspect.test.ts` 直接读取 `src/styles.css` 校验这两条声明，防止回归。
 
 ## 已知边界
 
