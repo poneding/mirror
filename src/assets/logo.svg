@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">Mirror</title>
+  <desc id="desc">A graphite play facet and its frosted reflection on a silver mirror.</desc>
+  <style>
+    :root {
+      --mirror-white: #ffffff;
+      --mirror-snow: #fafafa;
+      --mirror-pearl: #f4f4f5;
+      --mirror-silver: #e4e4e7;
+      --mirror-edge: #d4d4d8;
+      --mirror-smoke: #a1a1aa;
+      --mirror-slate: #71717a;
+      --mirror-graphite: #3f3f46;
+      --mirror-charcoal: #27272a;
+      --mirror-ink: #18181b;
+      --mirror-black: #09090b;
+    }
+  </style>
+  <defs>
+    <path id="tile" d="M304 64H720C866 64 960 158 960 304V720C960 866 866 960 720 960H304C158 960 64 866 64 720V304C64 158 158 64 304 64Z"/>
+    <path id="reflection" d="M407 353C419 346 432 354 432 368V656C432 670 419 678 407 671L224 529C212 520 212 504 224 495Z"/>
+    <path id="play" d="M503 290C484 277 460 291 460 314V710C460 733 484 747 503 734L780 534C795 523 795 501 780 490Z"/>
+    <linearGradient id="rim" x1="166" y1="64" x2="818" y2="960" gradientUnits="userSpaceOnUse">
+      <stop stop-color="var(--mirror-white)"/>
+      <stop offset=".32" stop-color="var(--mirror-edge)"/>
+      <stop offset=".55" stop-color="var(--mirror-smoke)"/>
+      <stop offset=".78" stop-color="var(--mirror-white)"/>
+      <stop offset="1" stop-color="var(--mirror-smoke)"/>
+    </linearGradient>
+    <linearGradient id="surface" x1="252" y1="110" x2="752" y2="930" gradientUnits="userSpaceOnUse">
+      <stop stop-color="var(--mirror-snow)"/>
+      <stop offset=".4" stop-color="var(--mirror-pearl)"/>
+      <stop offset=".73" stop-color="var(--mirror-silver)"/>
+      <stop offset="1" stop-color="var(--mirror-edge)"/>
+    </linearGradient>
+    <linearGradient id="surface-light" x1="182" y1="118" x2="702" y2="802" gradientUnits="userSpaceOnUse">
+      <stop stop-color="var(--mirror-white)" stop-opacity=".9"/>
+      <stop offset=".56" stop-color="var(--mirror-white)" stop-opacity="0"/>
+      <stop offset="1" stop-color="var(--mirror-white)" stop-opacity=".12"/>
+    </linearGradient>
+    <linearGradient id="reflection-fill" x1="253" y1="389" x2="438" y2="646" gradientUnits="userSpaceOnUse">
+      <stop stop-color="var(--mirror-silver)"/>
+      <stop offset=".48" stop-color="var(--mirror-smoke)"/>
+      <stop offset="1" stop-color="var(--mirror-slate)"/>
+    </linearGradient>
+    <linearGradient id="reflection-edge" x1="275" y1="369" x2="444" y2="670" gradientUnits="userSpaceOnUse">
+      <stop stop-color="var(--mirror-white)"/>
+      <stop offset="1" stop-color="var(--mirror-slate)" stop-opacity=".25"/>
+    </linearGradient>
+    <linearGradient id="graphite" x1="482" y1="292" x2="670" y2="705" gradientUnits="userSpaceOnUse">
+      <stop stop-color="var(--mirror-graphite)"/>
+      <stop offset=".5" stop-color="var(--mirror-charcoal)"/>
+      <stop offset="1" stop-color="var(--mirror-black)"/>
+    </linearGradient>
+    <linearGradient id="facet-light" x1="467" y1="325" x2="687" y2="664" gradientUnits="userSpaceOnUse">
+      <stop stop-color="var(--mirror-white)" stop-opacity=".2"/>
+      <stop offset="1" stop-color="var(--mirror-white)" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="facet-edge" x1="461" y1="300" x2="685" y2="722" gradientUnits="userSpaceOnUse">
+      <stop stop-color="var(--mirror-slate)"/>
+      <stop offset=".48" stop-color="var(--mirror-graphite)"/>
+      <stop offset="1" stop-color="var(--mirror-black)"/>
+    </linearGradient>
+    <filter id="tile-shadow" x="0" y="0" width="1024" height="1024" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="14"/>
+      <feOffset dy="14" result="shadow"/>
+      <feFlood flood-color="var(--mirror-black)" flood-opacity=".16"/>
+      <feComposite in2="shadow" operator="in"/>
+    </filter>
+    <filter id="facet-shadow" x="145" y="230" width="730" height="620" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="16"/>
+      <feOffset dy="18" result="shadow"/>
+      <feFlood flood-color="var(--mirror-ink)" flood-opacity=".2"/>
+      <feComposite in2="shadow" operator="in"/>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <clipPath id="surface-clip"><use href="#tile"/></clipPath>
+    <clipPath id="play-clip"><use href="#play"/></clipPath>
+  </defs>
+  <!-- A quiet, continuous-corner mirror tile; transparent outside the silhouette. -->
+  <use href="#tile" fill="var(--mirror-black)" filter="url(#tile-shadow)"/>
+  <use href="#tile" fill="url(#rim)"/>
+  <path d="M306 74H718C861 74 950 163 950 306V718C950 861 861 950 718 950H306C163 950 74 861 74 718V306C74 163 163 74 306 74Z" fill="url(#surface)" stroke="var(--mirror-white)" stroke-opacity=".7" stroke-width="2"/>
+  <g clip-path="url(#surface-clip)">
+    <path d="M75 714V300C75 162 162 75 300 75H846Z" fill="url(#surface-light)"/>
+  </g>
+  <!-- The smaller, softer left facet is the reflection; the right facet plays. -->
+  <use href="#reflection" fill="url(#reflection-fill)" fill-opacity=".68" stroke="url(#reflection-edge)" stroke-width="3"/>
+  <path d="M421 369V655" stroke="var(--mirror-white)" stroke-opacity=".65" stroke-width="3" stroke-linecap="round"/>
+  <g filter="url(#facet-shadow)">
+    <use href="#play" fill="url(#graphite)" stroke="url(#facet-edge)" stroke-width="3"/>
+    <g clip-path="url(#play-clip)">
+      <path d="M454 279H827V427L454 612Z" fill="url(#facet-light)"/>
+      <path d="M472 325V692" stroke="var(--mirror-silver)" stroke-opacity=".22" stroke-width="3" stroke-linecap="round"/>
+    </g>
+  </g>
+</svg>

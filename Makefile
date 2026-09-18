@@ -30,7 +30,7 @@ RELEASE_BIN  := src-tauri/target/release/mirror
 .PHONY: help install check check-js check-rust lint lint-js lint-rust lint-fix \
         fmt fmt-check test test-js test-rust test-watch test-coverage coverage \
         run run-web build build-js build-app bundle audit clean clean-js clean-rust \
-        clean-all reinstall
+        clean-all reinstall icons
 
 # ---------------------------------------------------------------------------
 # Help
@@ -71,6 +71,9 @@ help: ## Show this help
 	@echo "    build-js         Frontend bundle only"
 	@echo "    build-app        Full desktop binary + installers"
 	@echo "    bundle           Alias for build-app"
+	@echo ""
+	@echo "  Assets"
+	@echo "    icons            Regenerate desktop icons from the SVG logo"
 	@echo ""
 	@echo "  Maintenance"
 	@echo "    clean            Remove build output (dist, frontend caches)"
@@ -165,6 +168,13 @@ build-app: ## Full desktop build
 	$(TAURI) build
 
 bundle: build-app ## Alias for build-app
+
+# ---------------------------------------------------------------------------
+# Assets
+# ---------------------------------------------------------------------------
+
+icons: ## Regenerate the UI logo and desktop icons from the vector master
+	node scripts/generate-icons.mjs
 
 # ---------------------------------------------------------------------------
 # Maintenance
