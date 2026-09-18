@@ -163,6 +163,19 @@ export function stepSpeed(current: number, direction: 1 | -1): number {
   return SPEED_STEPS[next];
 }
 
+/**
+ * Snaps an arbitrary rate onto the nearest preset.
+ *
+ * The speed control is a fixed list, so a value that is not on the ladder (a
+ * hand-edited or legacy stored number) would have no matching entry to display.
+ */
+export function snapSpeed(value: number): number {
+  return SPEED_STEPS.reduce(
+    (best, step) => (Math.abs(step - value) < Math.abs(best - value) ? step : best),
+    SPEED_STEPS[0],
+  );
+}
+
 export type EndedAction =
   | { kind: "repeat" }
   | { kind: "advance"; id: string }
@@ -216,6 +229,60 @@ export type ShortcutCommand =
   | { type: "speed"; direction: 1 | -1 }
   | { type: "fullscreen" }
   | { type: "panel"; panel: Exclude<Panel, null> };
+
+/**
+ * Shortcut rows shown in settings.
+ *
+ * Settings lists only the bindings that apply to the platform Mirror is running
+ * on, so the keys shown always match the keys that actually work.
+ */
+export type ShortcutId =
+  | "playPause"
+  | "seek"
+  | "volume"
+  | "track"
+  | "speed"
+  | "fullscreen"
+  | "settings"
+  | "playlist"
+  | "closePanel";
+
+export const SHORTCUT_ORDER: ShortcutId[] = [
+  "playPause",
+  "seek",
+  "volume",
+  "track",
+  "speed",
+  "fullscreen",
+  "settings",
+  "playlist",
+  "closePanel",
+];
+
+/** Display keys for one shortcut on the given platform. */
+export function shortcutKeys(id: ShortcutId, platform: Platform): string[] {
+  const isMac = platform === "mac";
+  switch (id) {
+    case "playPause":
+      return ["Space"];
+    case "seek":
+      return ["←", "→"];
+    case "volume":
+      return ["↑", "↓"];
+    case "track":
+      return isMac ? ["⌘", "← / →"] : ["Alt", "← / →"];
+    case "speed":
+      return isMac ? ["⌘", "↑ / ↓"] : ["Alt", "↑ / ↓"];
+    case "fullscreen":
+      return ["Enter"];
+    case "settings":
+      return isMac ? ["⌘", ","] : ["Ctrl", ","];
+    case "playlist":
+      return isMac ? ["⌘", "P"] : ["Ctrl", "P"];
+    case "closePanel":
+      return ["Esc"];
+  }
+}
 
 export type ShortcutKeyEvent = {
   key: string;
@@ -293,40 +360,109 @@ export function isTypingTarget(tagName: string): boolean {
   return tagName === "INPUT" || tagName === "SELECT" || tagName === "TEXTAREA";
 }
 
-export type WatchHistory = {
+/** One entry in the watch history: enough to resume and to list it. */
+export type HistoryEntry = {
   id: string;
   name: string;
+  path: string;
+  source: string;
   position: number;
+  duration: number;
   updatedAt: number;
 };
 
-export function parseStoredHistory(raw: string | null): WatchHistory | null {
-  if (!raw) return null;
+/** Most recent entries kept; older ones fall off the end. */
+export const HISTORY_LIMIT = 60;
+
+function toHistoryEntry(value: unknown): HistoryEntry | null {
+  if (!value || typeof value !== "object") return null;
+  const entry = value as Partial<HistoryEntry>;
+  if (typeof entry.id !== "string" || typeof entry.position !== "number") return null;
+  if (!Number.isFinite(entry.position) || entry.position < 0) return null;
+  return {
+    id: entry.id,
+    name: typeof entry.name === "string" ? entry.name : "",
+    path: typeof entry.path === "string" ? entry.path : "",
+    source: typeof entry.source === "string" ? entry.source : "",
+    position: entry.position,
+    duration: typeof entry.duration === "number" && Number.isFinite(entry.duration) ? entry.duration : 0,
+    updatedAt: typeof entry.updatedAt === "number" ? entry.updatedAt : 0,
+  };
+}
+
+/**
+ * Reads the watch history.
+ *
+ * Accepts both the current array form and the earlier single-entry object, so an
+ * existing profile upgrades without losing its resume point.
+ */
+export function parseHistory(raw: string | null): HistoryEntry[] {
+  if (!raw) return [];
   try {
-    const parsed = JSON.parse(raw) as Partial<WatchHistory>;
-    if (typeof parsed.id !== "string" || typeof parsed.position !== "number") return null;
-    if (!Number.isFinite(parsed.position) || parsed.position < 0) return null;
-    return {
-      id: parsed.id,
-      name: typeof parsed.name === "string" ? parsed.name : "",
-      position: parsed.position,
-      updatedAt: typeof parsed.updatedAt === "number" ? parsed.updatedAt : 0,
-    };
+    const parsed: unknown = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return parsed
+        .map(toHistoryEntry)
+        .filter((entry): entry is HistoryEntry => entry !== null)
+        .slice(0, HISTORY_LIMIT);
+    }
+    const single = toHistoryEntry(parsed);
+    return single ? [single] : [];
   } catch {
-    return null;
+    return [];
   }
+}
+
+/** Moves an entry to the front, replacing any earlier visit to the same item. */
+export function recordHistory(
+  list: HistoryEntry[],
+  entry: HistoryEntry,
+  limit: number = HISTORY_LIMIT,
+): HistoryEntry[] {
+  return [entry, ...list.filter((item) => item.id !== entry.id)].slice(0, limit);
+}
+
+/** Drops a single entry, for removing one item without clearing the list. */
+export function removeHistoryEntry(list: HistoryEntry[], id: string): HistoryEntry[] {
+  return list.filter((entry) => entry.id !== id);
 }
 
 /**
  * Resumes a saved position only when it still makes sense for this item and it
  * is not effectively at the end of the video.
  */
-export function resumePosition(history: WatchHistory | null, activeId: string | null, duration: number): number {
-  if (!history || !activeId || history.id !== activeId) return 0;
+export function resumePosition(list: HistoryEntry[], activeId: string | null, duration: number): number {
+  if (!activeId) return 0;
+  const entry = list.find((item) => item.id === activeId);
+  if (!entry) return 0;
   if (!Number.isFinite(duration) || duration <= 0) return 0;
-  if (history.position >= duration - 2) return 0;
-  return history.position;
+  if (entry.position >= duration - 2) return 0;
+  return entry.position;
 }
+
+/** Promotes a history entry back into a playable playlist item. */
+export function historyToMediaItem(entry: HistoryEntry): MediaItem {
+  return {
+    id: entry.id,
+    name: entry.name,
+    path: entry.path,
+    source: entry.source,
+    duration: entry.duration,
+  };
+}
+
+/**
+ * Project metadata shown in the About section.
+ *
+ * `repository` is the single place to edit once the public repository exists.
+ */
+export const PROJECT = {
+  name: "mirror",
+  repository: "https://github.com/poneding/mirror",
+};
+
+/** Shown when the native version lookup is unavailable (browser preview). */
+export const FALLBACK_VERSION = "0.1.0";
 
 /** Max chrome opacity timer while playing. */
 export const CHROME_HIDE_DELAY_MS = 2800;

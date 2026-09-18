@@ -1,9 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   CHROME_HIDE_DELAY_MS,
+  HISTORY_LIMIT,
+  type HistoryEntry,
+  historyToMediaItem,
   type KeyValueStore,
   type MediaItem,
   OSD_DURATION_MS,
+  PROJECT,
+  SHORTCUT_ORDER,
   SEEK_STEP_MAX,
   SEEK_STEP_MIN,
   SPEED_STEPS,
@@ -23,13 +28,17 @@ import {
   isSupportedVideo,
   isTypingTarget,
   nextIndex,
-  parseStoredHistory,
+  parseHistory,
   parseStoredPlaylist,
+  recordHistory,
+  removeHistoryEntry,
   resolveActiveId,
   resolveEndedAction,
   resolveEscape,
   resolveShortcut,
   resumePosition,
+  shortcutKeys,
+  snapSpeed,
   stepSpeed,
 } from "./player";
 
@@ -265,6 +274,23 @@ describe("stepSpeed", () => {
   });
 });
 
+describe("snapSpeed", () => {
+  it("leaves preset rates untouched", () => {
+    for (const step of SPEED_STEPS) expect(snapSpeed(step)).toBe(step);
+  });
+
+  it("snaps an off-ladder rate to the nearest preset", () => {
+    expect(snapSpeed(1.1)).toBe(1);
+    expect(snapSpeed(1.15)).toBe(1.25);
+    expect(snapSpeed(0.6)).toBe(0.5);
+  });
+
+  it("clamps rates outside the ladder to the ends", () => {
+    expect(snapSpeed(9)).toBe(SPEED_STEPS[SPEED_STEPS.length - 1]);
+    expect(snapSpeed(0.01)).toBe(SPEED_STEPS[0]);
+  });
+});
+
 describe("resolveEndedAction", () => {
   const items = [item("a"), item("b"), item("c")];
 
@@ -306,6 +332,52 @@ describe("detectPlatform", () => {
 
   it("treats everything else as linux", () => {
     expect(detectPlatform("Mozilla/5.0 (X11; Linux x86_64)", "Linux x86_64")).toBe("linux");
+  });
+});
+
+describe("platform-specific shortcut list", () => {
+  it("uses cmd on macOS and alt on Windows/Linux for track and speed", () => {
+    expect(shortcutKeys("track", "mac")).toEqual(["⌘", "← / →"]);
+    expect(shortcutKeys("speed", "mac")).toEqual(["⌘", "↑ / ↓"]);
+    expect(shortcutKeys("track", "windows")).toEqual(["Alt", "← / →"]);
+    expect(shortcutKeys("speed", "linux")).toEqual(["Alt", "↑ / ↓"]);
+  });
+
+  it("uses cmd on macOS and ctrl elsewhere for panels", () => {
+    expect(shortcutKeys("settings", "mac")).toEqual(["⌘", ","]);
+    expect(shortcutKeys("playlist", "mac")).toEqual(["⌘", "P"]);
+    expect(shortcutKeys("settings", "windows")).toEqual(["Ctrl", ","]);
+    expect(shortcutKeys("playlist", "linux")).toEqual(["Ctrl", "P"]);
+  });
+
+  it("renders the same modifier-free keys on every platform", () => {
+    for (const platform of ["mac", "windows", "linux"] as const) {
+      expect(shortcutKeys("playPause", platform)).toEqual(["Space"]);
+      expect(shortcutKeys("seek", platform)).toEqual(["←", "→"]);
+      expect(shortcutKeys("volume", platform)).toEqual(["↑", "↓"]);
+      expect(shortcutKeys("fullscreen", platform)).toEqual(["Enter"]);
+    }
+  });
+
+  // Every row must map to a binding that resolveShortcut actually implements.
+  it("lists exactly one binding per row and never an empty one", () => {
+    for (const platform of ["mac", "windows", "linux"] as const) {
+      for (const id of SHORTCUT_ORDER) {
+        const keys = shortcutKeys(id, platform);
+        expect(keys.length).toBeGreaterThan(0);
+        expect(keys.every((key) => key.length > 0)).toBe(true);
+      }
+    }
+  });
+
+  it("never advertises the other platform's modifier", () => {
+    for (const id of SHORTCUT_ORDER) {
+      expect(shortcutKeys(id, "mac")).not.toContain("Alt");
+      expect(shortcutKeys(id, "mac")).not.toContain("Ctrl");
+      for (const platform of ["windows", "linux"] as const) {
+        expect(shortcutKeys(id, platform)).not.toContain("⌘");
+      }
+    }
   });
 });
 
@@ -411,32 +483,89 @@ describe("isTypingTarget", () => {
 });
 
 describe("watch history", () => {
-  it("parses a valid entry", () => {
-    const raw = JSON.stringify({ id: "a", name: "A", position: 42, updatedAt: 1 });
-    expect(parseStoredHistory(raw)).toEqual({ id: "a", name: "A", position: 42, updatedAt: 1 });
+  const entry = (id: string, overrides: Partial<HistoryEntry> = {}): HistoryEntry => ({
+    id,
+    name: `${id}.mp4`,
+    path: `/videos/${id}.mp4`,
+    source: `asset://localhost/${id}.mp4`,
+    position: 30,
+    duration: 100,
+    updatedAt: 1,
+    ...overrides,
   });
 
-  it("rejects malformed entries", () => {
-    expect(parseStoredHistory(null)).toBeNull();
-    expect(parseStoredHistory("nope")).toBeNull();
-    expect(parseStoredHistory(JSON.stringify({ id: "a", position: -5 }))).toBeNull();
-    expect(parseStoredHistory(JSON.stringify({ position: 3 }))).toBeNull();
+  it("parses a stored array", () => {
+    const list = parseHistory(JSON.stringify([entry("a"), entry("b")]));
+    expect(list.map((item) => item.id)).toEqual(["a", "b"]);
+  });
+
+  // The earlier format kept only one entry; an upgrade must not lose it.
+  it("upgrades the previous single-entry format", () => {
+    const legacy = JSON.stringify({ id: "old", name: "Old", position: 12, updatedAt: 5 });
+    const list = parseHistory(legacy);
+    expect(list).toHaveLength(1);
+    expect(list[0].id).toBe("old");
+    expect(list[0].position).toBe(12);
+  });
+
+  it("rejects malformed entries and input", () => {
+    expect(parseHistory(null)).toEqual([]);
+    expect(parseHistory("nope")).toEqual([]);
+    expect(parseHistory(JSON.stringify([{ id: "a", position: -5 }, { position: 3 }, null]))).toEqual([]);
+  });
+
+  it("caps the list at the limit", () => {
+    const many = Array.from({ length: HISTORY_LIMIT + 20 }, (_, i) => entry(`id-${i}`));
+    expect(parseHistory(JSON.stringify(many))).toHaveLength(HISTORY_LIMIT);
+  });
+
+  it("records newest first and replaces an earlier visit", () => {
+    const list = recordHistory([entry("a"), entry("b")], entry("b", { position: 70 }));
+    expect(list.map((item) => item.id)).toEqual(["b", "a"]);
+    expect(list[0].position).toBe(70);
+  });
+
+  it("drops the oldest entry past the limit", () => {
+    const list = recordHistory([entry("a"), entry("b")], entry("c"), 2);
+    expect(list.map((item) => item.id)).toEqual(["c", "a"]);
+  });
+
+  it("removes a single entry and leaves the rest in order", () => {
+    const list = [entry("a"), entry("b"), entry("c")];
+    expect(removeHistoryEntry(list, "b").map((item) => item.id)).toEqual(["a", "c"]);
+  });
+
+  it("removing an unknown id leaves the list untouched", () => {
+    const list = [entry("a")];
+    expect(removeHistoryEntry(list, "missing")).toHaveLength(1);
+  });
+
+  // Removing the entry the player resumed from must not resurface the position.
+  it("a removed entry no longer resumes", () => {
+    const list = removeHistoryEntry([entry("a"), entry("b")], "a");
+    expect(resumePosition(list, "a", 100)).toBe(0);
   });
 
   it("resumes only for the matching, unfinished item", () => {
-    const history = { id: "a", name: "A", position: 30, updatedAt: 1 };
-    expect(resumePosition(history, "a", 100)).toBe(30);
-    expect(resumePosition(history, "b", 100)).toBe(0);
-    expect(resumePosition(null, "a", 100)).toBe(0);
+    const list = [entry("a"), entry("b", { position: 40 })];
+    expect(resumePosition(list, "a", 100)).toBe(30);
+    expect(resumePosition(list, "b", 100)).toBe(40);
+    expect(resumePosition(list, "missing", 100)).toBe(0);
+    expect(resumePosition([], "a", 100)).toBe(0);
   });
 
-  it("does not resume when the saved point is at the very end", () => {
-    expect(resumePosition({ id: "a", name: "A", position: 99, updatedAt: 1 }, "a", 100)).toBe(0);
+  it("does not resume at the very end or without a duration", () => {
+    const atEnd = [entry("a", { position: 99 })];
+    expect(resumePosition(atEnd, "a", 100)).toBe(0);
+    expect(resumePosition([entry("a")], "a", 0)).toBe(0);
+    expect(resumePosition([entry("a")], "a", Number.NaN)).toBe(0);
   });
 
-  it("does not resume without a usable duration", () => {
-    expect(resumePosition({ id: "a", name: "A", position: 5, updatedAt: 1 }, "a", 0)).toBe(0);
-    expect(resumePosition({ id: "a", name: "A", position: 5, updatedAt: 1 }, "a", Number.NaN)).toBe(0);
+  it("converts a history entry back into a playable item", () => {
+    const item = historyToMediaItem(entry("a"));
+    expect(item.id).toBe("a");
+    expect(item.source).toContain("asset://");
+    expect(item).not.toHaveProperty("position");
   });
 });
 
@@ -520,5 +649,10 @@ describe("constants stay coherent", () => {
     const keys = Object.values(STORAGE_KEYS);
     expect(new Set(keys).size).toBe(keys.length);
     for (const key of keys) expect(key.startsWith("mirror-")).toBe(true);
+  });
+
+  it("points the About section at an https repository", () => {
+    expect(PROJECT.repository.startsWith("https://")).toBe(true);
+    expect(PROJECT.name).toBe("mirror");
   });
 });
