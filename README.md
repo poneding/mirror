@@ -83,6 +83,15 @@ git tag v0.2.0 && git push origin v0.2.0
 # 然后在 GitHub 上为该 tag 创建并发布 release（正文由 CI 生成，无需手写）
 ```
 
+预发布阶段还有一个坑：更新检查读的是 `releases/latest/download/latest.json`，而 GitHub 的
+`/releases/latest` **不包含** prerelease 与草稿，API 也不能把 prerelease 设为 latest
+（`Latest release cannot be draft or prerelease`）。所以只要还没有正式版，发布 release 时
+**不要** 勾选 prerelease，否则应用检查更新会报 “Could not fetch a valid release JSON from the
+remote”。tag 本身叫 `v0.1.0-alpha.2`（SemVer 预发布）没问题，隐藏它的是 GitHub 那个勾。已经
+勾错的可以取消：`gh release edit <tag> --prerelease=false`。等正式版发布后，再把 prerelease
+勾回来即可——那时 `latest.json` 指向正式版，预发布版用户依然会收到升级提示（SemVer 里
+`0.1.0 > 0.1.0-alpha.3`）。
+
 `.github/workflows/release.yml` 随后会：
 
 1. 校验 tag 符合 SemVer（`v1.2.3`，预发布用 `v1.2.3-rc.1`），并把它写入 `package.json`、`package-lock.json`、`tauri.conf.json`、`Cargo.toml`（`scripts/set-version.mjs`，tag 即版本号唯一来源）。

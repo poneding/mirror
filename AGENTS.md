@@ -261,7 +261,7 @@ A GitHub release is the only trigger; pushing to `main` publishes nothing.
    `notes`, and the update notice renders it through `lib/markdown.ts` as
    elements — release notes are remote text, so they are never injected as HTML.
 
-Three things must stay in step or updates break, and none of them fail at build
+Four things must stay in step or updates break, and none of them fail at build
 or test time:
 
 - The tag is the single source of truth for the version. Editing a version
@@ -272,6 +272,18 @@ or test time:
   mismatch; the app then refuses the update forever.
 - `plugins > updater > endpoints` must point at this repository's
   `releases/latest/download/latest.json`.
+- The release that endpoint resolves to must **not** carry GitHub's *prerelease*
+  flag while the project has no stable release. `/releases/latest` skips drafts
+  and prereleases, and the API refuses `make_latest` on one ("Latest release
+  cannot be draft or prerelease"), so with prerelease-only releases the URL
+  returns 404 and the app reports "Could not fetch a valid release JSON from the
+  remote" — `tauri-plugin-updater` maps the failed JSON decode to that message.
+  A SemVer prerelease *tag* (`v0.1.0-alpha.2`) is fine; it is the GitHub flag
+  that hides the release. Fix one already published with
+  `gh release edit <tag> --prerelease=false`. Once a stable release exists,
+  flagging prereleases again is correct: `/releases/latest` is then the stable
+  and a prerelease install still upgrades to it, because `0.1.0` is greater than
+  `0.1.0-alpha.3` in SemVer.
 
 Commit subjects drive the changelog, so keep them Conventional
 (`feat`/`fix`/`perf`/`refactor`/`docs`); `cliff.toml` filters out
