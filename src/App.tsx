@@ -38,7 +38,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open } from "@tauri-apps/plugin-dialog";
 import { check, type Update } from "@tauri-apps/plugin-updater";
-import { ChangeEvent, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { ChangeEvent, type CSSProperties, type FocusEvent as ReactFocusEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   CHROME_HIDE_DELAY_MS,
   FALLBACK_VERSION,
@@ -54,6 +54,7 @@ import {
   type PlaybackMode,
   STORAGE_KEYS,
   SUPPORTED_VIDEO_EXTENSIONS,
+  TOOLTIP_DELAY_MS,
   type Theme,
   type HistoryEntry,
   acceptsUpdate,
@@ -73,6 +74,7 @@ import {
   DEFAULT_SANS_STACK,
   historyToMediaItem,
   isSupportedVideo,
+  isTextTruncated,
   isTypingTarget,
   mediaKind,
   nextIndex,
@@ -92,6 +94,8 @@ import {
   shortcutKeys,
   snapSpeed,
   stepSpeed,
+  tipShift,
+  tooltipPlacement,
   type ShortcutId,
 } from "./lib/player";
 import { type InlineNode, parseMarkdown } from "./lib/markdown";
@@ -279,9 +283,28 @@ function volumeIcon(level: number, size: number) {
   return <Volume2 size={size} />;
 }
 
+/**
+ * One bubble of the app tooltip: the full label for a truncated name or a
+ * hovered button. `anchorCx` is the label's centre and stays the source of
+ * truth; `cx` is where the bubble actually sits after tipShift slid it inside
+ * the window. `below` flips it under anchors that hug the window top (the
+ * titlebar name).
+ */
+type Tip = { id: string; text: string; anchorCx: number; cx: number; top: number; below: boolean };
+
+/** The handler bundle `tipFor(key, text)` spreads onto buttons and links. */
+type TipProps = {
+  onMouseEnter: (event: ReactMouseEvent<HTMLElement>) => void;
+  onMouseLeave: () => void;
+  onFocus: (event: ReactFocusEvent<HTMLElement>) => void;
+  onBlur: () => void;
+  "aria-describedby"?: string;
+};
+
 function App() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const titlebarNameRef = useRef<HTMLSpanElement>(null);
   const hideChromeTimer = useRef<number | undefined>(undefined);
   const osdTimer = useRef<number | undefined>(undefined);
   const historyWriteAt = useRef(0);
@@ -325,6 +348,10 @@ function App() {
   const [autoClearHistory, setAutoClearHistory] = useState(() => getInitialBoolean(store, STORAGE_KEYS.autoClearHistory, false));
   const [isMaximized, setIsMaximized] = useState(false);
   const [osd, setOsd] = useState<{ icon: ReactNode; text: string } | null>(null);
+  const [tip, setTip] = useState<Tip | null>(null);
+  const tipTimer = useRef<number | undefined>(undefined);
+  const tipRef = useRef<HTMLDivElement>(null);
+  const tipId = useId();
   const [appVersion, setAppVersion] = useState(FALLBACK_VERSION);
   const [history, setHistory] = useState<HistoryEntry[]>(() => parseHistory(localStorage.getItem(STORAGE_KEYS.history)));
   const [panelTab, setPanelTab] = useState<"playlist" | "history">("playlist");
@@ -954,6 +981,76 @@ function App() {
     window.setTimeout(() => setToast(""), 1800);
   };
 
+  /**
+   * Opens a bubble for `anchor` after the hover pause (shadcn's provider
+   * default). A bubble for another anchor that is already up yields at once
+   * instead of lingering over the wrong spot.
+   */
+  function openTip(anchor: HTMLElement, key: string, text: string) {
+    const rect = anchor.getBoundingClientRect();
+    const below = tooltipPlacement(rect.top) === "below";
+    setTip((current) => (current && current.id !== key ? null : current));
+    window.clearTimeout(tipTimer.current);
+    tipTimer.current = window.setTimeout(() => setTip({
+      id: key,
+      text,
+      anchorCx: rect.left + rect.width / 2,
+      cx: rect.left + rect.width / 2,
+      top: below ? rect.bottom : rect.top,
+      below,
+    }), TOOLTIP_DELAY_MS);
+  }
+
+  /** The name rows only speak when the label is actually cut off — the
+   *  ellipsis is the whole reason the name is unreadable. */
+  function openNameTip(anchor: HTMLElement, key: string, text: string) {
+    if (isTextTruncated(anchor.scrollWidth, anchor.clientWidth)) openTip(anchor, key, text);
+    else hideTip();
+  }
+
+  function hideTip() {
+    window.clearTimeout(tipTimer.current);
+    setTip(null);
+  }
+
+  /** One shared hover/focus bundle: every tooltip in the app is this bubble.
+   *  Focus shows it only for keyboard focus (:focus-visible), like shadcn. */
+  const tipFor = (key: string, text: string): TipProps => ({
+    onMouseEnter: (event) => openTip(event.currentTarget, key, text),
+    onMouseLeave: hideTip,
+    onFocus: (event) => {
+      if (event.currentTarget.matches(":focus-visible")) openTip(event.currentTarget, key, text);
+    },
+    onBlur: hideTip,
+    "aria-describedby": tip?.id === key ? tipId : undefined,
+  });
+
+  /** The bubble's width is only known once it is mounted, so the slide
+   *  inside the window happens here — before the browser paints, so the
+   *  bubble never appears at the clipped position. */
+  useLayoutEffect(() => {
+    if (!tip) return;
+    const el = tipRef.current;
+    if (!el) return;
+    // offsetWidth, not getBoundingClientRect: the entrance animation scales
+    // the visual box and would skew the measurement.
+    const cx = tipShift(tip.anchorCx, el.offsetWidth, window.innerWidth);
+    if (cx !== tip.cx) setTip({ ...tip, cx });
+  }, [tip]);
+
+  // Rows that leave the list (removed, cleared, tab or panel switched) take
+  // their bubble with them — an unmounted anchor fires no mouseleave.
+  useEffect(() => {
+    window.clearTimeout(tipTimer.current);
+    setTip(null);
+  }, [items.length, history.length, panel, panelTab]);
+
+  // A track that advances under a parked pointer must not leave the old name up.
+  useEffect(() => {
+    window.clearTimeout(tipTimer.current);
+    setTip(null);
+  }, [activeItem?.name]);
+
   const removeHistory = (id: string) => {
     setHistory((current) => removeHistoryEntry(current, id));
   };
@@ -1063,34 +1160,51 @@ function App() {
         createItems(event.dataTransfer.files);
       }}
     >
-      <header className={`titlebar${isMac ? " mac" : ""}`} data-tauri-drag-region="true">
+      <header
+        className={`titlebar${isMac ? " mac" : ""}`}
+        data-tauri-drag-region="true"
+        aria-describedby={tip?.id === "titlebar" ? tipId : undefined}
+        onMouseOver={(event) => {
+          // The centre strip is pointer-events: none (it must not block the
+          // drag region), so the header carries the hover for the name and is
+          // measured against the span where the ellipsis clips. Buttons run
+          // their own bubbles through tipFor.
+          if ((event.target as HTMLElement).closest("button")) return;
+          const name = titlebarNameRef.current;
+          if (name) openNameTip(name, "titlebar", activeItem?.name ?? "");
+        }}
+        onMouseOut={(event) => {
+          const to = event.relatedTarget as HTMLElement | null;
+          if (!to || !to.closest(".titlebar")) hideTip();
+        }}
+      >
         <div className="titlebar-actions no-drag">
-          <button className={`icon-button subtle ${isPinned ? "active" : ""}`} onClick={() => void togglePinned()} title={isPinned ? strings.pinned : strings.pinWindow} aria-label={isPinned ? strings.pinned : strings.pinWindow}>
+          <button className={`icon-button subtle ${isPinned ? "active" : ""}`} onClick={() => void togglePinned()} {...tipFor("pin", isPinned ? strings.pinned : strings.pinWindow)} aria-label={isPinned ? strings.pinned : strings.pinWindow}>
             {isPinned ? <Pin size={16} /> : <PinOff size={16} />}
           </button>
-          <button className="icon-button subtle" onClick={() => setPanel("settings")} title={strings.settings} aria-label={strings.settings}>
+          <button className="icon-button subtle" onClick={() => setPanel("settings")} {...tipFor("settings", strings.settings)} aria-label={strings.settings}>
             <Settings2 size={17} />
           </button>
         </div>
         <div className="titlebar-center" data-tauri-drag-region="true">
-          <span>{activeItem?.name ?? ""}</span>
+          <span ref={titlebarNameRef}>{activeItem?.name ?? ""}</span>
         </div>
         <div className="titlebar-actions no-drag">
-          <button className="icon-button subtle" onClick={() => setPanel("playlist")} title={strings.playlist} aria-label={strings.playlist}>
+          <button className="icon-button subtle" onClick={() => setPanel("playlist")} {...tipFor("open-playlist", strings.playlist)} aria-label={strings.playlist}>
             <ListVideo size={17} />
           </button>
           {!isMac && <span className="window-divider" aria-hidden="true" />}
           {!isMac && (
             <>
-              <button className="icon-button subtle window-control" onClick={() => void minimizeWindow()} title={strings.minimize} aria-label={strings.minimize}>
+              <button className="icon-button subtle window-control" onClick={() => void minimizeWindow()} {...tipFor("minimize", strings.minimize)} aria-label={strings.minimize}>
                 <Minus size={14} />
               </button>
               {showMaximize && (
-                <button className="icon-button subtle window-control" onClick={() => void toggleMaximizeWindow()} title={isMaximized ? strings.restore : strings.maximize} aria-label={isMaximized ? strings.restore : strings.maximize}>
+                <button className="icon-button subtle window-control" onClick={() => void toggleMaximizeWindow()} {...tipFor("maximize", isMaximized ? strings.restore : strings.maximize)} aria-label={isMaximized ? strings.restore : strings.maximize}>
                   {isMaximized ? <Minimize2 size={14} /> : <Square size={14} />}
                 </button>
               )}
-              <button className="icon-button subtle danger-strong window-control close-control" onClick={() => void closeWindow()} title={strings.close} aria-label={strings.close}>
+              <button className="icon-button subtle danger-strong window-control close-control" onClick={() => void closeWindow()} {...tipFor("close-window", strings.close)} aria-label={strings.close}>
                 <X size={15} />
               </button>
             </>
@@ -1152,18 +1266,18 @@ function App() {
         <div className="controls-row">
           <div className="controls-left">
             <div className="volume-control">
-              <button className="control-button" onClick={() => applyVolume(volume > 0 ? 0 : 0.8)} title={volume === 0 ? "Unmute" : strings.muted} aria-label={volume === 0 ? "Unmute" : strings.muted}>
+              <button className="control-button" onClick={() => applyVolume(volume > 0 ? 0 : 0.8)} {...tipFor("mute", volume === 0 ? "Unmute" : strings.muted)} aria-label={volume === 0 ? "Unmute" : strings.muted}>
                 {volumeIcon(volume, 17)}
               </button>
               <input aria-label={strings.volume} className="volume-input" type="range" min="0" max="1" step="0.01" value={volume} onChange={(event) => applyVolume(Number(event.target.value))} style={{ "--progress": `${volume * 100}%` } as CSSProperties} />
             </div>
           </div>
           <div className="controls-center">
-            <button className="control-button" onClick={() => moveTrack(-1)} title={strings.nextPrevious} aria-label="Previous"><SkipBack size={17} fill="currentColor" /></button>
-            <button className="play-button" onClick={togglePlay} title={strings.playPause} aria-label={strings.playPause}>
+            <button className="control-button" onClick={() => moveTrack(-1)} {...tipFor("previous", strings.nextPrevious)} aria-label="Previous"><SkipBack size={17} fill="currentColor" /></button>
+            <button className="play-button" onClick={togglePlay} {...tipFor("play-pause", strings.playPause)} aria-label={strings.playPause}>
               {isPlaying ? <Pause size={17} fill="currentColor" /> : <Play size={17} fill="currentColor" />}
             </button>
-            <button className="control-button" onClick={() => moveTrack(1)} title={strings.nextPrevious} aria-label="Next"><SkipForward size={17} fill="currentColor" /></button>
+            <button className="control-button" onClick={() => moveTrack(1)} {...tipFor("next", strings.nextPrevious)} aria-label="Next"><SkipForward size={17} fill="currentColor" /></button>
           </div>
           <div className="controls-right">
             <Combobox
@@ -1173,8 +1287,10 @@ function App() {
               label={strings.playbackSpeed}
               placement="up"
               variant="chrome"
+              tipProps={tipFor("speed", strings.playbackSpeed)}
+              onListOpen={hideTip}
             />
-            <button className="control-button" onClick={() => void toggleFullscreen()} title={strings.fullScreen} aria-label={strings.fullScreen}>{isFullscreen ? <Minimize2 size={17} /> : <Maximize2 size={17} />}</button>
+            <button className="control-button" onClick={() => void toggleFullscreen()} {...tipFor("fullscreen", strings.fullScreen)} aria-label={strings.fullScreen}>{isFullscreen ? <Minimize2 size={17} /> : <Maximize2 size={17} />}</button>
           </div>
         </div>
       </footer>
@@ -1185,10 +1301,13 @@ function App() {
       {panel && (
         <>
           <button className="panel-backdrop" aria-label={strings.closePanel} onClick={() => setPanel(null)} />
-          <aside className={`side-panel ${panel}`}>
+          <aside
+            className={`side-panel ${panel}`}
+            onWheel={hideTip}
+          >
             <div className="panel-header">
               <h2>{panel === "settings" ? strings.settings : strings.playlist}</h2>
-              <button className="icon-button subtle danger-strong" onClick={() => setPanel(null)} title={strings.closePanel} aria-label={strings.closePanel}><X size={17} /></button>
+              <button className="icon-button subtle danger-strong" onClick={() => setPanel(null)} {...tipFor("close-panel", strings.closePanel)} aria-label={strings.closePanel}><X size={17} /></button>
             </div>
             {panel === "playlist" ? (
               <>
@@ -1222,11 +1341,11 @@ function App() {
                   <div className="tab-actions">
                     {panelTab === "playlist" ? (
                       <>
-                        <button className="icon-button subtle" onClick={() => void addVideos()} title={strings.add} aria-label={strings.add}><Plus size={15} /></button>
-                        <button className="icon-button subtle danger" onClick={clearPlaylist} disabled={items.length === 0} title={strings.clearPlaylist} aria-label={strings.clearPlaylist}><Trash2 size={14} /></button>
+                        <button className="icon-button subtle" onClick={() => void addVideos()} {...tipFor("add", strings.add)} aria-label={strings.add}><Plus size={15} /></button>
+                        <button className="icon-button subtle danger" onClick={clearPlaylist} disabled={items.length === 0} {...tipFor("clear-playlist", strings.clearPlaylist)} aria-label={strings.clearPlaylist}><Trash2 size={14} /></button>
                       </>
                     ) : (
-                      <button className="icon-button subtle danger" onClick={clearHistory} disabled={history.length === 0} title={strings.clearHistoryNow} aria-label={strings.clearHistoryNow}><Trash2 size={14} /></button>
+                      <button className="icon-button subtle danger" onClick={clearHistory} disabled={history.length === 0} {...tipFor("clear-history", strings.clearHistoryNow)} aria-label={strings.clearHistoryNow}><Trash2 size={14} /></button>
                     )}
                   </div>
                 </div>
@@ -1241,11 +1360,15 @@ function App() {
                             <button className="playlist-select" onClick={() => selectItem(item.id)}>
                               <span className="playlist-index">{item.id === activeId ? <Play size={11} fill="currentColor" /> : String(index + 1).padStart(2, "0")}</span>
                               <span className="playlist-name">
-                                <strong>{item.name}</strong>
+                                <strong
+                                  onMouseEnter={(event) => openNameTip(event.currentTarget, `item-${item.id}`, item.name)}
+                                  onMouseLeave={hideTip}
+                                  aria-describedby={tip?.id === `item-${item.id}` ? tipId : undefined}
+                                >{item.name}</strong>
                                 <small><span>{mediaKind(item) === "audio" ? strings.audio : strings.video}</span><span className="num">{item.duration > 0 ? formatTime(item.duration) : "--:--"}</span></small>
                               </span>
                             </button>
-                            <button className="item-remove" onClick={() => removeItem(item.id)} title={strings.removeItem} aria-label={`${strings.removeItem}: ${item.name}`}><X size={13} /></button>
+                            <button className="item-remove" onClick={() => removeItem(item.id)} {...tipFor(`remove-${item.id}`, strings.removeItem)} aria-label={`${strings.removeItem}: ${item.name}`}><X size={13} /></button>
                           </div>
                         ))}
                       </div>
@@ -1259,11 +1382,15 @@ function App() {
                           <button className="playlist-select" onClick={() => openHistoryEntry(entry)}>
                             <span className="playlist-index"><Play size={11} fill="currentColor" /></span>
                             <span className="playlist-name">
-                              <strong>{entry.name}</strong>
+                              <strong
+                                onMouseEnter={(event) => openNameTip(event.currentTarget, `hist-${entry.id}`, entry.name)}
+                                onMouseLeave={hideTip}
+                                aria-describedby={tip?.id === `hist-${entry.id}` ? tipId : undefined}
+                              >{entry.name}</strong>
                               <small className="num">{formatTime(entry.position)}{entry.duration ? ` / ${formatTime(entry.duration)}` : ""}</small>
                             </span>
                           </button>
-                          <button className="item-remove" onClick={() => removeHistory(entry.id)} title={strings.removeItem} aria-label={`${strings.removeItem}: ${entry.name}`}><X size={13} /></button>
+                          <button className="item-remove" onClick={() => removeHistory(entry.id)} {...tipFor(`remove-hist-${entry.id}`, strings.removeItem)} aria-label={`${strings.removeItem}: ${entry.name}`}><X size={13} /></button>
                         </div>
                       ))}
                     </div>
@@ -1372,9 +1499,22 @@ function App() {
 
       {toast && <div className="toast"><Trash2 size={14} /> {toast}</div>}
 
+      {tip && (
+        <div
+          ref={tipRef}
+          id={tipId}
+          role="tooltip"
+          className={`name-tip${tip.below ? " below" : ""}`}
+          style={{ top: tip.top, "--tip-cx": `${tip.cx}px` } as CSSProperties}
+        >
+          {tip.text}
+        </div>
+      )}
+
       {updateDialogOpen && (
         <UpdateDialog
           strings={strings}
+          tipFor={tipFor}
           status={updateStatus}
           currentVersion={appVersion}
           available={available}
@@ -1417,6 +1557,7 @@ function SettingSection({ icon, title, action, children }: { icon: ReactNode; ti
  */
 function UpdateDialog({
   strings,
+  tipFor,
   status,
   currentVersion,
   available,
@@ -1429,6 +1570,7 @@ function UpdateDialog({
   onEnablePreview,
 }: {
   strings: Copy;
+  tipFor: (key: string, text: string) => TipProps;
   status: UpdateStatus;
   currentVersion: string;
   available: Update | null;
@@ -1511,7 +1653,7 @@ function UpdateDialog({
           <>
             <p className="dialog-version">v{available.version} <span>· {strings.updateAvailable}</span></p>
             <ScrollArea className="dialog-changelog">
-              <Changelog body={available.body ?? ""} />
+              <Changelog body={available.body ?? ""} tipFor={tipFor} />
             </ScrollArea>
           </>
         )}
@@ -1541,21 +1683,21 @@ function UpdateDialog({
  *
  * Blocks become elements, never markup: the text arrives over the network, so
  * a commit message containing a tag must stay text.
- */function Changelog({ body }: { body: string }) {
+ */function Changelog({ body, tipFor }: { body: string; tipFor: (key: string, text: string) => TipProps }) {
   return (
     <div className="changelog">
       {parseMarkdown(body).map((block, index) => {
         switch (block.type) {
           case "heading":
-            return <h4 key={index} className={block.level >= 3 ? "changelog-group" : undefined}>{inline(block.content)}</h4>;
+            return <h4 key={index} className={block.level >= 3 ? "changelog-group" : undefined}>{inline(block.content, tipFor)}</h4>;
           case "list":
             return block.ordered
-              ? <ol key={index}>{block.items.map((item, itemIndex) => <li key={itemIndex}>{inline(item)}</li>)}</ol>
-              : <ul key={index}>{block.items.map((item, itemIndex) => <li key={itemIndex}>{inline(item)}</li>)}</ul>;
+              ? <ol key={index}>{block.items.map((item, itemIndex) => <li key={itemIndex}>{inline(item, tipFor)}</li>)}</ol>
+              : <ul key={index}>{block.items.map((item, itemIndex) => <li key={itemIndex}>{inline(item, tipFor)}</li>)}</ul>;
           case "rule":
             return <hr key={index} />;
           default:
-            return <p key={index}>{inline(block.content)}</p>;
+            return <p key={index}>{inline(block.content, tipFor)}</p>;
         }
       })}
     </div>
@@ -1563,7 +1705,7 @@ function UpdateDialog({
 }
 
 /** Renders one line of release notes; links stay text so nothing navigates away. */
-function inline(nodes: InlineNode[]) {
+function inline(nodes: InlineNode[], tipFor: (key: string, text: string) => TipProps) {
   return nodes.map((node, index) => {
     switch (node.type) {
       case "strong":
@@ -1571,7 +1713,7 @@ function inline(nodes: InlineNode[]) {
       case "code":
         return <code key={index}>{node.value}</code>;
       case "link":
-        return <span className="changelog-link" key={index} title={node.href}>{node.value}</span>;
+        return <span className="changelog-link" key={index} {...tipFor(`link-${index}`, node.href)}>{node.value}</span>;
       default:
         return node.value;
     }
@@ -1723,6 +1865,8 @@ function Combobox({
   label,
   placement = "down",
   variant = "field",
+  tipProps,
+  onListOpen,
 }: {
   value: string;
   options: ComboboxOption[];
@@ -1730,6 +1874,11 @@ function Combobox({
   label: string;
   placement?: "down" | "up";
   variant?: "field" | "chrome";
+  /** Hover/focus tooltip bundle for the trigger; suppressed while the list is
+   *  open so the bubble never sits on top of the options. */
+  tipProps?: TipProps;
+  /** The list is opening — the caller dismisses what must not overlap it. */
+  onListOpen?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
@@ -1751,7 +1900,14 @@ function Combobox({
   const openList = () => {
     setActive(selected >= 0 ? selected : 0);
     setOpen(true);
+    onListOpen?.();
   };
+
+  // Keeps the highlighted option in view while arrowing through a long list.
+  useEffect(() => {
+    if (!open) return;
+    document.getElementById(`${listId}-${active}`)?.scrollIntoView({ block: "nearest" });
+  }, [active, listId, open]);
 
   const commit = (index: number) => {
     const option = options[index];
@@ -1804,6 +1960,7 @@ function Combobox({
         type="button"
         role="combobox"
         className="combobox-trigger"
+        {...(open ? undefined : tipProps)}
         aria-label={label}
         aria-haspopup="listbox"
         aria-expanded={open}

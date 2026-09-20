@@ -513,6 +513,47 @@ export function isTypingTarget(tagName: string): boolean {
   return tagName === "INPUT" || tagName === "SELECT" || tagName === "TEXTAREA";
 }
 
+/**
+ * True when an element's content is wider than its visible box, i.e. the CSS
+ * ellipsis is active and the tail of the label is hidden. Equal measurements
+ * mean the label fits, so `>` — not `>=` — decides the tooltip.
+ */
+export function isTextTruncated(scrollWidth: number, clientWidth: number): boolean {
+  return scrollWidth > clientWidth;
+}
+
+/** Hover pause before the filename tooltip opens (shadcn's provider default). */
+export const TOOLTIP_DELAY_MS = 700;
+
+/** Below this anchor top there is no room over the label; the tooltip flips under it. */
+export const TOOLTIP_FLIP_PX = 44;
+
+/**
+ * Where the tooltip sits relative to its label: over it — or under it when the
+ * label hugs the window top, as the titlebar name does.
+ */
+export function tooltipPlacement(anchorTop: number): "above" | "below" {
+  return anchorTop >= TOOLTIP_FLIP_PX ? "above" : "below";
+}
+
+/** How close to the window edge the bubble may come, in px. */
+export const TOOLTIP_MARGIN_PX = 8;
+
+/**
+ * Keeps a bubble inside the window without shrinking it: the centre slides
+ * inward until both edges clear the margin. `anchorCx` stays the source of
+ * truth so re-running is stable.
+ */
+export function tipShift(
+  anchorCx: number,
+  bubbleWidth: number,
+  viewportWidth: number,
+  margin: number = TOOLTIP_MARGIN_PX,
+): number {
+  const half = bubbleWidth / 2;
+  return Math.min(Math.max(anchorCx, margin + half), viewportWidth - margin - half);
+}
+
 /** One entry in the watch history: enough to resume and to list it. */
 export type HistoryEntry = {
   id: string;

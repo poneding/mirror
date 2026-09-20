@@ -16,6 +16,7 @@ import {
   SEEK_STEP_MIN,
   SPEED_STEPS,
   STORAGE_KEYS,
+  TOOLTIP_FLIP_PX,
   WINDOW_FIT,
   acceptsUpdate,
   advanceSeekHold,
@@ -37,6 +38,7 @@ import {
   holdSpeed,
   isPreviewVersion,
   isSupportedVideo,
+  isTextTruncated,
   isTypingTarget,
   mediaKind,
   nextIndex,
@@ -55,6 +57,8 @@ import {
   shortcutKeys,
   snapSpeed,
   stepSpeed,
+  tipShift,
+  tooltipPlacement,
 } from "./player";
 
 /** In-memory stand-in for localStorage. */
@@ -695,6 +699,57 @@ describe("isTypingTarget", () => {
     expect(isTypingTarget("SELECT")).toBe(true);
     expect(isTypingTarget("DIV")).toBe(false);
     expect(isTypingTarget("BUTTON")).toBe(false);
+  });
+});
+
+describe("isTextTruncated", () => {
+  it("is false while the label exactly fits its box", () => {
+    expect(isTextTruncated(120, 120)).toBe(false);
+    expect(isTextTruncated(0, 0)).toBe(false);
+  });
+
+  it("is true once the content overflows the visible box", () => {
+    expect(isTextTruncated(121, 120)).toBe(true);
+    expect(isTextTruncated(2000, 40)).toBe(true);
+  });
+
+  it("never fires when the box is wider than the content", () => {
+    expect(isTextTruncated(50, 200)).toBe(false);
+  });
+});
+
+describe("tooltipPlacement", () => {
+  it("opens over labels that have room above them", () => {
+    expect(tooltipPlacement(120)).toBe("above");
+    expect(tooltipPlacement(TOOLTIP_FLIP_PX)).toBe("above");
+  });
+
+  it("flips below labels that hug the window top", () => {
+    expect(tooltipPlacement(0)).toBe("below");
+    expect(tooltipPlacement(12)).toBe("below");
+    expect(tooltipPlacement(TOOLTIP_FLIP_PX - 1)).toBe("below");
+  });
+});
+
+describe("tipShift", () => {
+  it("keeps the bubble centred while there is room on both sides", () => {
+    expect(tipShift(400, 200, 800)).toBe(400);
+  });
+
+  it("slides the bubble inward near the left edge", () => {
+    expect(tipShift(40, 200, 800)).toBe(108);
+  });
+
+  it("slides inward near the right edge", () => {
+    expect(tipShift(760, 200, 800)).toBe(692);
+  });
+
+  it("keeps even the smallest bubble inside the margin", () => {
+    expect(tipShift(6, 300, 800)).toBe(158);
+  });
+
+  it("never pushes the bubble off the far edge on a tiny window", () => {
+    expect(tipShift(20, 260, 280)).toBe(138);
   });
 });
 

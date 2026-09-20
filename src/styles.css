@@ -305,9 +305,19 @@ input:focus-visible {
   overflow: hidden;
   color: var(--muted-foreground);
   font-size: 12px;
+  pointer-events: none;
+}
+
+/* The strip is a flex container and text-overflow only draws on a block
+   container's own inline content, so the ellipsis lives on the span — a
+   blockified flex item, which needs min-width: 0 to shrink under the strip's
+   max-width instead of overflowing it unsized. The hover tooltip in App.tsx
+   measures this span, not the strip. */
+.titlebar-center span {
+  min-width: 0;
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  pointer-events: none;
 }
 
 .titlebar-actions { gap: 1px; position: relative; z-index: 1; }
@@ -1217,6 +1227,51 @@ kbd {
   transform: translateX(50%);
   backdrop-filter: var(--glass-blur);
   animation: toast-in .2s ease;
+}
+
+/* Filename tooltip — the app's tooltip for every truncated label and button.
+   It wears the same frosted material as the OSD and the dropdown: the shared
+   glass recipe on the small-surface radius, with `--foreground` ink (the
+   surface is a translucent film over an unknown picture, so the muted ink
+   would not stay legible). A fade+zoom entrance; no arrow — the bubble names
+   the anchor, it does not point at it. It stays pointer-events: none — it
+   must never intercept the click that closes its row. The `.below` variant
+   flips under labels that hug the window top (the titlebar name). */
+.name-tip {
+  --tip-shift: calc(-100% - 8px);
+  position: fixed;
+  /* The layout box sits at x 0 and the position comes from translateX, so the
+     shrink-to-fit width is computed against the full viewport: anchoring with
+     `left` near the window edge would squeeze the bubble into the sliver of
+     space left of it (overflow-wrap: anywhere lets it break every glyph).
+     tipShift in App.tsx measures this natural width and slides the bubble
+     inside the window before paint. */
+  left: 0;
+  z-index: 50;
+  max-width: min(420px, calc(100vw - 24px));
+  padding: 6px 10px;
+  border: 1px solid var(--glass-border-strong);
+  border-radius: 10px;
+  color: var(--foreground);
+  background: var(--glass-fill);
+  box-shadow: var(--glass-sheen), var(--shadow);
+  backdrop-filter: var(--glass-blur);
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: center;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+  transform: translateX(var(--tip-cx, 0px)) translate(-50%, var(--tip-shift));
+  animation: name-tip-in .15s ease-out;
+}
+
+.name-tip.below { --tip-shift: 8px; }
+
+@keyframes name-tip-in {
+  from {
+    opacity: 0;
+    transform: translateX(var(--tip-cx, 0px)) translate(-50%, var(--tip-shift)) scale(.96);
+  }
 }
 
 @keyframes toast-in {
