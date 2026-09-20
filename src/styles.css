@@ -1,7 +1,16 @@
 /* Mirror — shadcn default (neutral) palette, frosted surfaces, on-media chrome. */
 
 :root {
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans", sans-serif;
+  /* Typography. Sans is the platform's own stack — no font file is bundled, so
+     Mirror stays offline and inherits the OS's reading sizes. Mono is for
+     anything that counts: a timecode, the seek step, the playback speed, a
+     playlist number, a version, a shortcut key. */
+  --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans", sans-serif;
+  /* `Cascadia Mono` and `Consolas` are named explicitly: `Menlo` is macOS-only,
+     and the bare `monospace` default on Windows is Courier New. */
+  --font-mono: ui-monospace, "Cascadia Mono", Consolas, SFMono-Regular, Menlo, monospace;
+
+  font-family: var(--font-sans);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 
@@ -137,6 +146,12 @@ html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 html, body { background: transparent; }
 button, input { font: inherit; }
 button { color: inherit; }
+
+/* A value that counts — a duration, a seek step, a version. Used where the
+   element around it also holds prose, so the whole rule cannot carry the face.
+   `font-variant-numeric` only equalises digit widths; mono also keeps the
+   glyphs from moving while the value changes. */
+.num { font-family: var(--font-mono); }
 
 button:focus-visible,
 input:focus-visible {
@@ -289,7 +304,7 @@ input:focus-visible {
   max-width: 40%;
   overflow: hidden;
   color: var(--muted-foreground);
-  font-size: 11px;
+  font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
   pointer-events: none;
@@ -423,7 +438,7 @@ input:focus-visible {
   border-radius: 9px;
   color: var(--primary-foreground);
   background: var(--primary);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   transition: opacity .2s ease, transform .2s ease;
@@ -479,7 +494,7 @@ input:focus-visible {
 .panel-open .player-chrome { opacity: 0; transform: translate(-50%, 12px); pointer-events: none; }
 
 .progress-row { display: flex; align-items: center; gap: 8px; }
-.time-label { min-width: 34px; color: var(--muted-foreground); font-size: 10px; font-variant-numeric: tabular-nums; }
+.time-label { min-width: 34px; color: var(--muted-foreground); font-family: var(--font-mono); font-size: 11px; font-variant-numeric: tabular-nums; }
 .time-label:last-child { text-align: right; }
 
 /* The panel is only as wide as its own content, so the seek bar — the only part
@@ -580,7 +595,8 @@ input:focus-visible {
   background: var(--glass-fill);
   box-shadow: var(--glass-sheen), var(--shadow);
   backdrop-filter: var(--glass-blur);
-  font-size: 12px;
+  font-family: var(--font-mono);
+  font-size: 13px;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -714,7 +730,7 @@ input:focus-visible {
   border-radius: 7px;
   color: var(--muted-foreground);
   background: transparent;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   white-space: nowrap;
   cursor: pointer;
@@ -729,7 +745,7 @@ input:focus-visible {
   box-shadow: 0 1px 2px rgba(0, 0, 0, .12);
 }
 
-.tabs-count { color: var(--muted-foreground); font-size: 9px; font-variant-numeric: tabular-nums; }
+.tabs-count { color: var(--muted-foreground); font-family: var(--font-mono); font-size: 10px; font-variant-numeric: tabular-nums; }
 .tabs-trigger[aria-selected="true"] .tabs-count { color: var(--foreground); opacity: .65; }
 .tab-actions { display: flex; align-items: center; gap: 1px; }
 
@@ -789,7 +805,8 @@ input:focus-visible {
   border-radius: 7px;
   color: var(--muted-foreground);
   background: var(--glass-soft);
-  font-size: 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -799,7 +816,7 @@ input:focus-visible {
 .playlist-name strong {
   overflow: hidden;
   color: var(--foreground);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -807,7 +824,7 @@ input:focus-visible {
 
 /* Two-ended meta line: media type on the left, duration on the right. The
    history row keeps a plain text node here, which stays at the start. */
-.playlist-name small { display: flex; justify-content: space-between; gap: 8px; color: var(--muted-foreground); font-size: 10px; }
+.playlist-name small { display: flex; justify-content: space-between; gap: 8px; color: var(--muted-foreground); font-size: 11px; }
 
 .playlist-empty {
   display: flex;
@@ -819,14 +836,14 @@ input:focus-visible {
   text-align: center;
 }
 
-.playlist-empty strong { color: var(--foreground); font-size: 12px; font-weight: 600; }
-.playlist-empty span { font-size: 10px; line-height: 1.5; }
+.playlist-empty strong { color: var(--foreground); font-size: 13px; font-weight: 600; }
+.playlist-empty span { font-size: 11px; line-height: 1.5; }
 
 .settings-content { display: flex; flex-direction: column; gap: 20px; }
 /* Sections are separated by rhythm alone — no rules between them. */
 .setting-section { padding: 0; }
 .section-heading { display: flex; align-items: center; gap: 7px; margin-bottom: 11px; }
-.section-heading h3 { margin: 0; font-size: 11px; font-weight: 600; }
+.section-heading h3 { margin: 0; font-size: 12px; font-weight: 600; }
 
 /* Plain glyph, no badge behind it. */
 .section-icon { display: grid; place-items: center; color: var(--muted-foreground); }
@@ -841,7 +858,7 @@ input:focus-visible {
   border-radius: 7px;
   color: var(--muted-foreground);
   background: var(--glass-soft);
-  font-size: 10px;
+  font-size: 11px;
   cursor: pointer;
   transition: color .2s ease, border-color .2s ease, background .2s ease;
 }
@@ -851,14 +868,14 @@ input:focus-visible {
 
 /* label on the left, value control on the right */
 .setting-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 9px 0; }
-.setting-row-label { color: var(--muted-foreground); font-size: 10px; }
+.setting-row-label { color: var(--muted-foreground); font-size: 11px; }
 
-.about-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 8px 0; color: var(--muted-foreground); font-size: 10px; }
+.about-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 8px 0; color: var(--muted-foreground); font-size: 11px; }
 .about-row strong { color: var(--foreground); font-weight: 500; }
 .about-repo { overflow-wrap: anywhere; text-align: right; }
 
-.setting-label { display: flex; align-items: center; justify-content: space-between; margin: 10px 0 6px; color: var(--muted-foreground); font-size: 10px; }
-.setting-label strong { color: var(--foreground); font-size: 11px; font-weight: 500; }
+.setting-label { display: flex; align-items: center; justify-content: space-between; margin: 10px 0 6px; color: var(--muted-foreground); font-size: 11px; }
+.setting-label strong { color: var(--foreground); font-size: 12px; font-weight: 500; }
 
 /* ---------- combobox ---------- */
 
@@ -876,7 +893,7 @@ input:focus-visible {
   border-radius: 8px;
   color: var(--foreground);
   background: var(--glass-soft);
-  font-size: 10px;
+  font-size: 11px;
   cursor: pointer;
   transition: border-color .2s ease, background .2s ease;
 }
@@ -915,7 +932,7 @@ input:focus-visible {
   padding: 6px 8px;
   border-radius: 6px;
   color: var(--muted-foreground);
-  font-size: 10px;
+  font-size: 11px;
   white-space: nowrap;
   cursor: pointer;
   transition: color .15s ease, background .15s ease;
@@ -932,6 +949,9 @@ input:focus-visible {
    next to it — the padding-driven height this used to have left it 2px short.
    At rest it is plain text: the surface and the chevron only appear on hover,
    focus or while the list is open. */
+/* The transport bar's dropdown holds speeds, so its trigger and its options are
+   values rather than labels — the theme and language dropdowns in the settings
+   panel keep the UI face. */
 .combobox.chrome .combobox-trigger {
   width: auto;
   min-width: 46px;
@@ -941,8 +961,11 @@ input:focus-visible {
   border-radius: 8px;
   color: var(--muted-foreground);
   background: transparent;
-  font-size: 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
 }
+
+.combobox.chrome .combobox-option { font-family: var(--font-mono); }
 
 /* The chevron keeps its slot at all times so the control never changes width —
    sizing it away would shift the label, and the fullscreen button beside it,
@@ -987,7 +1010,7 @@ input:focus-visible {
   border-radius: 8px;
   color: var(--muted-foreground);
   background: transparent;
-  font-size: 11px;
+  font-size: 12px;
   text-align: left;
   transition: color .2s ease, background .2s ease, border-color .2s ease;
 }
@@ -997,7 +1020,7 @@ input:focus-visible {
 .mode-list button.selected { border-color: var(--glass-border); color: var(--foreground); background: var(--glass-hover); }
 .mode-list button.selected > svg { color: var(--foreground); }
 
-.toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 10px 0; color: var(--muted-foreground); font-size: 10px; cursor: pointer; }
+.toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 10px 0; color: var(--muted-foreground); font-size: 11px; cursor: pointer; }
 
 .switch {
   position: relative;
@@ -1017,9 +1040,9 @@ input:focus-visible {
 .switch.checked span { transform: translateX(14px); background: var(--primary-foreground); }
 
 
-.shortcut-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin: 7px 0; color: var(--muted-foreground); font-size: 10px; }
+.shortcut-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin: 7px 0; color: var(--muted-foreground); font-size: 11px; }
 .shortcut-row span { display: flex; flex-direction: column; gap: 3px; }
-.shortcut-row small { color: var(--muted-foreground); font-size: 9px; opacity: .8; }
+.shortcut-row small { color: var(--muted-foreground); font-size: 10px; opacity: .8; }
 .shortcut-row > div { display: flex; gap: 3px; }
 
 kbd {
@@ -1029,8 +1052,8 @@ kbd {
   border-radius: 5px;
   color: var(--foreground);
   background: var(--glass-soft);
-  font-family: inherit;
-  font-size: 9px;
+  font-family: var(--font-mono);
+  font-size: 10px;
   text-align: center;
 }
 
@@ -1048,7 +1071,7 @@ kbd {
   border-radius: 9px;
   color: var(--foreground);
   background: var(--glass-soft);
-  font-size: 11px;
+  font-size: 12px;
   cursor: pointer;
   transition: background .2s ease, border-color .2s ease;
 }
@@ -1056,8 +1079,8 @@ kbd {
 .update-button:hover:not(:disabled) { border-color: var(--glass-border-strong); background: var(--glass-hover); }
 .update-button:disabled { color: var(--muted-foreground); cursor: default; }
 
-.update-status { margin: 0; color: var(--muted-foreground); font-size: 10px; line-height: 1.5; }
-.update-status strong { color: var(--foreground); font-size: 11px; font-weight: 600; }
+.update-status { margin: 0; color: var(--muted-foreground); font-size: 11px; line-height: 1.5; }
+.update-status strong { color: var(--foreground); font-family: var(--font-mono); font-size: 12px; font-weight: 600; }
 .update-status.error { color: var(--destructive); }
 
 .changelog {
@@ -1068,15 +1091,15 @@ kbd {
   background: var(--glass-soft);
 }
 
-.changelog h4 { margin: 0 0 7px; color: var(--foreground); font-size: 11px; font-weight: 600; }
-.changelog h4.changelog-group { margin: 12px 0 6px; color: var(--muted-foreground); font-size: 10px; font-weight: 500; letter-spacing: .04em; }
+.changelog h4 { margin: 0 0 7px; color: var(--foreground); font-size: 12px; font-weight: 600; }
+.changelog h4.changelog-group { margin: 12px 0 6px; color: var(--muted-foreground); font-size: 11px; font-weight: 500; letter-spacing: .04em; }
 .changelog h4:first-child { margin-top: 0; }
-.changelog p, .changelog ul, .changelog ol { margin: 0 0 7px; color: var(--foreground); font-size: 11px; line-height: 1.55; }
+.changelog p, .changelog ul, .changelog ol { margin: 0 0 7px; color: var(--foreground); font-size: 12px; line-height: 1.55; }
 .changelog ul, .changelog ol { padding-left: 16px; }
 .changelog li + li { margin-top: 3px; }
 .changelog > :last-child { margin-bottom: 0; }
 .changelog strong { font-weight: 600; }
-.changelog code { padding: 1px 5px; border-radius: 5px; color: var(--foreground); background: var(--glass-hover); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; }
+.changelog code { padding: 1px 5px; border-radius: 5px; color: var(--foreground); background: var(--glass-hover); font-family: var(--font-mono); font-size: 11px; }
 .changelog hr { margin: 10px 0; border: 0; border-top: 1px solid var(--glass-border); }
 .changelog-link { text-decoration: underline dotted; text-underline-offset: 2px; cursor: help; }
 
@@ -1094,7 +1117,7 @@ kbd {
   color: var(--foreground);
   background: var(--glass-fill);
   box-shadow: var(--glass-sheen), var(--shadow);
-  font-size: 11px;
+  font-size: 12px;
   transform: translateX(50%);
   backdrop-filter: var(--glass-blur);
   animation: toast-in .2s ease;
@@ -1157,14 +1180,15 @@ kbd {
 
 .dialog-version {
   margin: 0;
-  font-size: 12px;
+  font-family: var(--font-mono);
+  font-size: 13px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 
 .dialog-version span { color: var(--muted-foreground); font-weight: 400; }
 
-.dialog-lead { margin: 0; color: var(--muted-foreground); font-size: 11px; line-height: 1.6; }
+.dialog-lead { margin: 0; color: var(--muted-foreground); font-size: 12px; line-height: 1.6; }
 
 .dialog-lead.error { color: var(--destructive); }
 
@@ -1181,7 +1205,7 @@ kbd {
 }
 
 /* A hint under a toggle: quieter than the label it explains. */
-.setting-hint { margin: 2px 0 0; color: var(--muted-foreground); font-size: 10px; }
+.setting-hint { margin: 2px 0 0; color: var(--muted-foreground); font-size: 11px; }
 
 @keyframes dialog-in {
   from { opacity: 0; transform: translateY(6px) scale(.98); }

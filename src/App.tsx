@@ -1139,7 +1139,7 @@ function App() {
                               <span className="playlist-index">{item.id === activeId ? <Play size={11} fill="currentColor" /> : String(index + 1).padStart(2, "0")}</span>
                               <span className="playlist-name">
                                 <strong>{item.name}</strong>
-                                <small><span>{mediaKind(item) === "audio" ? strings.audio : strings.video}</span><span>{item.duration > 0 ? formatTime(item.duration) : "--:--"}</span></small>
+                                <small><span>{mediaKind(item) === "audio" ? strings.audio : strings.video}</span><span className="num">{item.duration > 0 ? formatTime(item.duration) : "--:--"}</span></small>
                               </span>
                             </button>
                             <button className="item-remove" onClick={() => removeItem(item.id)} title={strings.removeItem} aria-label={`${strings.removeItem}: ${item.name}`}><X size={13} /></button>
@@ -1157,7 +1157,7 @@ function App() {
                             <span className="playlist-index"><Play size={11} fill="currentColor" /></span>
                             <span className="playlist-name">
                               <strong>{entry.name}</strong>
-                              <small>{formatTime(entry.position)}{entry.duration ? ` / ${formatTime(entry.duration)}` : ""}</small>
+                              <small className="num">{formatTime(entry.position)}{entry.duration ? ` / ${formatTime(entry.duration)}` : ""}</small>
                             </span>
                           </button>
                           <button className="item-remove" onClick={() => removeHistory(entry.id)} title={strings.removeItem} aria-label={`${strings.removeItem}: ${entry.name}`}><X size={13} /></button>
@@ -1180,7 +1180,7 @@ function App() {
                   </div>
                 </SettingSection>
                 <SettingSection icon={<SlidersHorizontal size={14} />} title={strings.playback}>
-                  <div className="range-setting"><div className="setting-label"><span>{strings.seekStep}</span><strong>{seekStep} {strings.seconds}</strong></div><input type="range" min="5" max="60" step="5" value={seekStep} onChange={(event) => setSeekStep(Number(event.target.value))} style={{ "--progress": `${((seekStep - 5) / 55) * 100}%` } as CSSProperties} /></div>
+                  <div className="range-setting"><div className="setting-label"><span>{strings.seekStep}</span><strong className="num">{seekStep} {strings.seconds}</strong></div><input type="range" min="5" max="60" step="5" value={seekStep} onChange={(event) => setSeekStep(Number(event.target.value))} style={{ "--progress": `${((seekStep - 5) / 55) * 100}%` } as CSSProperties} /></div>
                   <div className="setting-label"><span>{strings.playbackMode}</span></div>
                   <div className="mode-list">{playbackOptions.map(({ key, label, icon: Icon }) => <button key={key} className={playbackMode === key ? "selected" : ""} onClick={() => setPlaybackMode(key)}><span><Icon size={15} />{label}</span>{playbackMode === key && <Zap size={13} />}</button>)}</div>
                   <ToggleRow label={strings.clearHistory} checked={autoClearHistory} onChange={setAutoClearHistory} />
@@ -1217,7 +1217,7 @@ function App() {
                   ))}
                 </SettingSection>
                 <SettingSection icon={<Info size={14} />} title={strings.about}>
-                  <div className="about-row"><span>{strings.version}</span><strong>v{appVersion}</strong></div>
+                  <div className="about-row"><span>{strings.version}</span><strong className="num">v{appVersion}</strong></div>
                   <div className="about-row"><span>{strings.repository}</span><strong className="about-repo">{PROJECT.repository}</strong></div>
                 </SettingSection>
               </ScrollArea>
