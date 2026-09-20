@@ -176,13 +176,26 @@ input:focus-visible {
 
 /* ---------- shell ---------- */
 
-/* Home is the OS-blurred window showing through: no opaque fill. */
+/* Home is the OS-blurred window showing through: no opaque fill.
+
+   The floors keep the home layout from collapsing in a small window, but they
+   must never exceed the viewport. The window's minimum size is enforced on the
+   *outer* frame: Windows clamps `ptMinTrackSize` to the 640x360 that tao hands
+   it, while the shadow insets tao adds back in `set_inner_size` are not part of
+   that number, so dragging to the stop leaves a client area below the design
+   minimum — 626x352 CSS at 175% scaling, 8px short in height. A floor bigger
+   than the viewport makes the shell taller than the window: `.stage` still
+   centres the picture in a 360px-tall box while only the top 352px are on
+   screen, so the picture sits 4px down (a black strip above it) and its bottom
+   leaves the window. That is "the picture is never cropped" broken by the
+   layout, and `min(px, 100%)` is the fix: keep the floor wherever it fits, give
+   it up where the window is smaller. */
 .mirror-shell {
   position: relative;
   width: 100%;
   height: 100%;
-  min-width: 640px;
-  min-height: 360px;
+  min-width: min(640px, 100%);
+  min-height: min(360px, 100%);
   overflow: hidden;
   isolation: isolate;
   background: transparent;
@@ -1074,7 +1087,6 @@ kbd {
 }
 
 @media (max-width: 760px) {
-  .mirror-shell { min-width: 0; }
   .titlebar { padding: 0 11px; }
   .titlebar-center { display: none; }
   .player-chrome { padding: 10px 10px; }

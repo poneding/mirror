@@ -18,18 +18,31 @@ import stylesheet from "../styles.css?raw";
  * min-height: 0` drops the automatic minimum, which is what lets
  * `object-fit: contain` do its job — those two declarations are load-bearing, so
  * this test fails if either one disappears.
+ *
+ * Letterboxing is only enough if the stage itself fits in the window, which is
+ * what the `.mirror-shell` min-size floors can break: the OS enforces the
+ * window's minimum on the outer frame, so the client area at the drag stop is a
+ * few px smaller than the 640x360 the layout is written for. A floor larger
+ * than the viewport makes the shell taller than the window, `.stage` centres the
+ * picture in the full box anyway, and the picture is pushed down and cropped —
+ * with no `<video>` declaration involved. So the floors are checked here too.
  */
+
+/** Declarations of one CSS block, keyed by property. */
+function parseDeclarations(body: string): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const chunk of body.split(";")) {
+    const [property, ...rest] = chunk.split(":");
+    if (rest.length) map.set(property.trim(), rest.join(":").trim());
+  }
+  return map;
+}
 
 /** Declarations of one CSS rule, keyed by property. */
 function declarations(css: string, selector: string): Map<string, string> {
   const rule = new RegExp(`(?:^|[},])\\s*${selector.replace(".", "\\.")}\\s*\\{([^}]*)\\}`, "m").exec(css);
   expect(rule, `no \`${selector}\` rule in the stylesheet`).not.toBeNull();
-  const map = new Map<string, string>();
-  for (const chunk of rule![1].split(";")) {
-    const [property, ...rest] = chunk.split(":");
-    if (rest.length) map.set(property.trim(), rest.join(":").trim());
-  }
-  return map;
+  return parseDeclarations(rule![1]);
 }
 
 describe("video letterboxing", () => {
@@ -50,5 +63,30 @@ describe("video letterboxing", () => {
   it("keeps the stage clipping the element rather than the picture", () => {
     expect(declarations(stylesheet, ".stage").get("overflow")).toBe("hidden");
     expect(declarations(stylesheet, ".mirror-shell").get("overflow")).toBe("hidden");
+  });
+});
+
+describe("shell sizing", () => {
+  it("bounds the shell's floors by the viewport", () => {
+    // `min(px, 100%)`, not a bare px: the floor has to give way when the window
+    // is smaller than the design minimum, which the drag stop always is.
+    const shell = declarations(stylesheet, ".mirror-shell");
+    expect(shell.get("min-width")).toBe("min(640px, 100%)");
+    expect(shell.get("min-height")).toBe("min(360px, 100%)");
+  });
+
+  it("has no bare size floor on the shell anywhere, media queries included", () => {
+    // A `min-height: 360px` hiding in a media query would break the picture just
+    // as well as one in the main rule.
+    const rules = [...stylesheet.matchAll(/\.mirror-shell\s*\{([^}]*)\}/g)];
+    expect(rules.length).toBeGreaterThan(0);
+    for (const [, body] of rules) {
+      const decls = parseDeclarations(body);
+      for (const property of ["min-width", "min-height"]) {
+        const value = decls.get(property);
+        if (value === undefined) continue;
+        expect(value === "0" || /^min\(.*100%\)$/.test(value), `${property}: ${value}`).toBe(true);
+      }
+    }
   });
 });
