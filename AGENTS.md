@@ -289,6 +289,22 @@ Deliberate constraints:
   Firing it from an effect (for example when `volume` changes) would also fire on
   load and on every unrelated re-render.
 - Actions without a visible value change (fullscreen) do not announce.
+- A shortcut never wakes the hidden chrome. `Space`, the media keys, volume and
+  speed answer with the pill alone, and the pointer is the only thing that
+  brings the titlebar and the control bar back: no effect may reveal the chrome
+  off `isPlaying` (keying one on it — or on a `showChrome` whose identity
+  changes with it — also fires on every keyboard play/pause), and closing a
+  panel must not reveal it either. `Esc` and the panel shortcut are pressed with
+  the pointer asleep or outside the window, so a panel that closes without the
+  pointer leaves the bars hidden; one closed *with* the pointer — a backdrop or
+  header-button click — reveals them through the `showChrome` that click already
+  ran. While a panel is open the titlebar stays up through `chromeShown`, so the
+  window stays draggable and closable.
+- The bars hide on a clock rather than on playback state: `CHROME_HIDE_DELAY_MS`
+  after the last pointer movement — paused as well as playing — and at once when
+  the pointer leaves the window. A picture arriving and a panel closing arm that
+  clock; the home screen, with nothing on the stage, keeps its bars. `isPlaying`
+  must not arm it either: a paused picture is not a reason to keep them.
 
 ## Release and updates
 

@@ -565,13 +565,15 @@ function App() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   });
 
+  /* The pointer is the one gesture that also restarts the clock, so the bars
+     step aside again a moment after the user stops moving. */
   const showChrome = useCallback(() => {
     setChromeVisible(true);
     window.clearTimeout(hideChromeTimer.current);
-    if (isPlaying && !panel) {
+    if (activeItem && !panel) {
       hideChromeTimer.current = window.setTimeout(() => setChromeVisible(false), CHROME_HIDE_DELAY_MS);
     }
-  }, [isPlaying, panel]);
+  }, [activeItem, panel]);
 
   useEffect(() => {
     if (!isTauri()) return;
@@ -594,10 +596,23 @@ function App() {
     return () => unlisten?.();
   }, []);
 
+  /* The clock is armed when a picture arrives and when a panel closes: the bars
+     are for the pointer, so they step aside on their own once it stops moving.
+     A paused picture is no reason to keep them — the window is still showing
+     something and the pointer is the way back.
+
+     Neither this nor anything else may key on `isPlaying`, and panels never
+     *reveal* the bars on the way in or out. An open panel already keeps the
+     titlebar up through `chromeShown` (so the window stays draggable) and hides
+     the control bar in CSS; closing one is not a pointer gesture — `Esc` and
+     the panel shortcut happen with the pointer asleep or outside the window,
+     and waking the bars there is exactly what must not happen. A pointer close
+     reveals them on its own, through `showChrome`. */
   useEffect(() => {
-    showChrome();
+    if (!activeItem || panel) return;
+    hideChromeTimer.current = window.setTimeout(() => setChromeVisible(false), CHROME_HIDE_DELAY_MS);
     return () => window.clearTimeout(hideChromeTimer.current);
-  }, [isPlaying, panel, showChrome]);
+  }, [activeItem, panel]);
 
   const selectItem = (id: string) => {
     setActiveId(id);
