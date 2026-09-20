@@ -665,6 +665,11 @@ input:focus-visible {
 
 .side-panel.settings { right: auto; left: 8px; }
 
+/* Settings carries a rail beside the section body, so it is wider than the
+   playlist. Capped against the viewport so the panel never runs off a narrow
+   window; below that the rail keeps its width and the body takes what is left. */
+.side-panel.settings { width: min(468px, calc(100vw - 16px)); }
+
 @keyframes panel-in-left {
   from { opacity: 0; transform: translateX(-18px); }
   to { opacity: 1; transform: translateX(0); }
@@ -858,8 +863,46 @@ input:focus-visible {
 .playlist-empty strong { color: var(--foreground); font-size: 13px; font-weight: 600; }
 .playlist-empty span { font-size: 11px; line-height: 1.5; }
 
+/* The settings panel is a rail plus one section at a time: the list is long
+   (appearance, playback, update, shortcuts, about), and stacked it needed
+   scrolling to reach the last one. The rail names every section, so the body
+   holds a single section and needs no spacers between sections. */
+.settings-layout { display: flex; flex: 1 1 auto; min-height: 0; gap: 4px; }
+
+.settings-nav {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 2px;
+  /* Wide enough for the English labels, which are the long ones here:
+     "Appearance" needs 63px of text against 33px for "快捷键", and the row
+     spends 49px on padding, border, icon and gap before the text. */
+  width: 120px;
+  padding: 0 0 14px 10px;
+  overflow-y: auto;
+}
+
+.settings-nav button {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--muted-foreground);
+  background: transparent;
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+  transition: color .15s ease, background .15s ease, border-color .15s ease;
+}
+
+.settings-nav button:hover { color: var(--foreground); background: var(--glass-soft); }
+.settings-nav button.selected { border-color: var(--glass-border); color: var(--foreground); background: var(--glass-hover); }
+.settings-nav button svg { flex: none; }
+
 .settings-content { display: flex; flex-direction: column; gap: 20px; }
-/* Sections are separated by rhythm alone — no rules between them. */
+/* One section is shown at a time, so the heading is the only separator needed. */
 .setting-section { padding: 0; }
 .section-heading { display: flex; align-items: center; gap: 7px; margin-bottom: 11px; }
 .section-heading h3 { margin: 0; font-size: 12px; font-weight: 600; }
@@ -888,6 +931,11 @@ input:focus-visible {
 /* label on the left, value control on the right */
 .setting-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 9px 0; }
 .setting-row-label { color: var(--muted-foreground); font-size: 11px; }
+/* Font choices are long words a user is trying to recognize, so the value
+   control gets room for one; the dropdown list is capped to the same width
+   (below) and ellipsizes the rest, so a long family name cannot push the menu
+   wider than the control it belongs to. */
+.setting-row .combobox { flex: 0 1 190px; }
 
 .about-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 8px 0; color: var(--muted-foreground); font-size: 11px; }
 .about-row strong { color: var(--foreground); font-weight: 500; }
@@ -959,6 +1007,35 @@ input:focus-visible {
 
 .combobox-option.active { color: var(--foreground); background: var(--glass-hover); }
 .combobox-option.selected { color: var(--foreground); }
+/* Family names run long; the list is capped so it cannot leave the panel, and
+   the label yields instead of overflowing. `overflow: hidden` also zeroes the
+   flex item's automatic minimum, so the ellipsis can actually engage. */
+.combobox.field .combobox-list { max-width: 190px; }
+.combobox-option > span { overflow: hidden; text-overflow: ellipsis; }
+
+/* Settings dropdowns wear the same glass as the transport's speed control: at
+   rest the trigger is plain text on the panel's own frost — no box — and the
+   frosted surface, the stronger border and the chevron appear on hover, focus
+   or while the list is open. The value keeps the panel's foreground ink (it is
+   the row's answer, not the transport's secondary readout), and the width
+   stays the row control's so long font names have room. */
+.combobox.field .combobox-trigger {
+  border-color: transparent;
+  background: transparent;
+}
+
+.combobox.field .combobox-trigger svg { opacity: 0; transition: opacity .15s ease; }
+
+.combobox.field .combobox-trigger:hover,
+.combobox.field .combobox-trigger:focus-visible,
+.combobox.field .combobox-trigger[aria-expanded="true"] {
+  border-color: var(--glass-border-strong);
+  background: var(--glass-hover);
+}
+
+.combobox.field .combobox-trigger:hover svg,
+.combobox.field .combobox-trigger:focus-visible svg,
+.combobox.field .combobox-trigger[aria-expanded="true"] svg { opacity: 1; }
 
 .combobox.down .combobox-list { top: calc(100% + 4px); left: 0; }
 .combobox.up .combobox-list { bottom: calc(100% + 6px); right: 0; }

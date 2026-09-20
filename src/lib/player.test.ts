@@ -30,7 +30,10 @@ import {
   getInitialLanguage,
   getInitialNumber,
   getInitialPlaybackMode,
+  getInitialString,
   getInitialTheme,
+  DEFAULT_MONO_STACK,
+  DEFAULT_SANS_STACK,
   holdSpeed,
   isPreviewVersion,
   isSupportedVideo,
@@ -45,7 +48,9 @@ import {
   resolveAutoplay,
   resolveEndedAction,
   resolveEscape,
+  resolveFontStack,
   resolveShortcut,
+  resolveStoredFont,
   resumePosition,
   shortcutKeys,
   snapSpeed,
@@ -166,6 +171,47 @@ describe("persisted setting defaults", () => {
 
   it("honours an explicit 'system' theme", () => {
     expect(getInitialTheme(fakeStore({ [STORAGE_KEYS.theme]: "system" }))).toBe("system");
+  });
+
+  it("treats a missing font choice as unset", () => {
+    expect(getInitialString(fakeStore(), STORAGE_KEYS.uiFont)).toBe("");
+    expect(getInitialString(fakeStore(), STORAGE_KEYS.monoFont)).toBe("");
+    expect(getInitialString(fakeStore({ [STORAGE_KEYS.monoFont]: "Cascadia Code" }), STORAGE_KEYS.monoFont)).toBe("Cascadia Code");
+  });
+});
+
+describe("font choices", () => {
+  it("leaves the default stacks untouched when nothing is chosen", () => {
+    expect(resolveFontStack("", DEFAULT_SANS_STACK)).toBe(DEFAULT_SANS_STACK);
+    expect(resolveFontStack("   ", DEFAULT_MONO_STACK)).toBe(DEFAULT_MONO_STACK);
+  });
+
+  it("puts the chosen family first with the stock stack as its fallback", () => {
+    expect(resolveFontStack("Cascadia Code", DEFAULT_MONO_STACK)).toBe(
+      `"Cascadia Code", ${DEFAULT_MONO_STACK}`,
+    );
+  });
+
+  it("trims whitespace around a stored family", () => {
+    expect(resolveFontStack("  Segoe UI  ", DEFAULT_SANS_STACK)).toBe(`"Segoe UI", ${DEFAULT_SANS_STACK}`);
+  });
+
+  it("escapes quote characters instead of breaking the CSS value", () => {
+    expect(resolveFontStack('a"b\\c', DEFAULT_MONO_STACK)).toBe(`"a\\"b\\\\c", ${DEFAULT_MONO_STACK}`);
+  });
+
+  it("keeps a stored choice the system still has", () => {
+    expect(resolveStoredFont("Cascadia Code", ["Arial", "Cascadia Code"])).toBe("Cascadia Code");
+  });
+
+  it("drops a stored choice the system has lost", () => {
+    expect(resolveStoredFont("Gone Sans", ["Arial"])).toBe("");
+    expect(resolveStoredFont("", ["Arial"])).toBe("");
+  });
+
+  it("matches family names exactly", () => {
+    // The dropdown offers the OS's own spelling; a near-miss is a different font.
+    expect(resolveStoredFont("cascadia code", ["Cascadia Code"])).toBe("");
   });
 });
 

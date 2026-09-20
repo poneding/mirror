@@ -67,7 +67,10 @@ import {
   getInitialLanguage,
   getInitialNumber,
   getInitialPlaybackMode,
+  getInitialString,
   getInitialTheme,
+  DEFAULT_MONO_STACK,
+  DEFAULT_SANS_STACK,
   historyToMediaItem,
   isSupportedVideo,
   isTypingTarget,
@@ -81,7 +84,9 @@ import {
   resolveAutoplay,
   resolveEndedAction,
   resolveEscape,
+  resolveFontStack,
   resolveShortcut,
+  resolveStoredFont,
   resumePosition,
   type SeekHoldState,
   shortcutKeys,
@@ -96,6 +101,12 @@ const isTauri = () => "__TAURI_INTERNALS__" in window;
 
 /** Where the update notice is in its lifecycle; `Update` holds the release itself. */
 type UpdateStatus = "idle" | "checking" | "current" | "preview" | "installing" | "installed" | "error";
+
+/** The installed fonts the settings dropdowns offer, from `list_system_fonts`. */
+type SystemFonts = { families: string[]; monospace: string[] };
+
+/** The settings panel's sections, which the left rail switches between. */
+type SettingsSectionId = "appearance" | "playback" | "update" | "shortcuts" | "about";
 
 const copy = {
   zh: {
@@ -113,6 +124,9 @@ const copy = {
     light: "浅色",
     system: "跟随系统",
     language: "语言",
+    uiFont: "界面字体",
+    monoFont: "等宽字体",
+    fontDefault: "跟随默认",
     playback: "播放",
     seekStep: "快进步长",
     seconds: "秒",
@@ -188,6 +202,9 @@ const copy = {
     light: "Light",
     system: "System",
     language: "Language",
+    uiFont: "Interface font",
+    monoFont: "Monospace font",
+    fontDefault: "Default",
     playback: "Playback",
     seekStep: "Seek step",
     seconds: "sec",
@@ -283,6 +300,12 @@ function App() {
   const [panel, setPanel] = useState<Panel>(null);
   const [theme, setTheme] = useState<Theme>(() => getInitialTheme(store));
   const [language, setLanguage] = useState<Language>(() => getInitialLanguage(store));
+  const [uiFont, setUiFont] = useState(() => getInitialString(store, STORAGE_KEYS.uiFont));
+  const [monoFont, setMonoFont] = useState(() => getInitialString(store, STORAGE_KEYS.monoFont));
+  /** The system's installed fonts; `null` until the native scan answers. */
+  const [systemFonts, setSystemFonts] = useState<SystemFonts | null>(null);
+  /** Which settings section the left rail shows; one at a time. */
+  const [settingsSection, setSettingsSection] = useState<SettingsSectionId>("appearance");
   const [playbackMode, setPlaybackMode] = useState<PlaybackMode>(() => getInitialPlaybackMode(store));
   const [seekStep, setSeekStep] = useState(() => getInitialNumber(store, STORAGE_KEYS.seekStep, 10, 5, 60));
   const [speed, setSpeed] = useState(() => snapSpeed(getInitialNumber(store, STORAGE_KEYS.speed, 1, 0.25, 2)));
@@ -408,6 +431,15 @@ function App() {
   const strings = copy[language];
   const updateBusy = updateStatus === "checking" || updateStatus === "installing";
 
+  /** The settings panel's left rail: one entry per section, in display order. */
+  const settingsSections: { id: SettingsSectionId; icon: typeof Palette; label: string }[] = [
+    { id: "appearance", icon: Palette, label: strings.appearance },
+    { id: "playback", icon: SlidersHorizontal, label: strings.playback },
+    { id: "update", icon: RefreshCw, label: strings.update },
+    { id: "shortcuts", icon: Command, label: strings.shortcuts },
+    { id: "about", icon: Info, label: strings.about },
+  ];
+
   /** What the update notice says; empty means there is nothing to say yet. */
   const updateStatusText = useMemo(() => {
     switch (updateStatus) {
@@ -437,6 +469,51 @@ function App() {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem(STORAGE_KEYS.theme, theme);
   }, [theme]);
+
+  // The chosen faces ride the same two tokens the stylesheet defaults use, so
+  // every element re-faces at once. The stock stack follows each choice as its
+  // fallback for glyphs the chosen font lacks; with no choice the inline
+  // override is removed so the stylesheet stays the single source of truth.
+  useEffect(() => {
+    const root = document.documentElement;
+    const applyFace = (property: string, chosen: string, fallback: string) => {
+      const stack = resolveFontStack(chosen, fallback);
+      if (stack === fallback) root.style.removeProperty(property);
+      else root.style.setProperty(property, stack);
+    };
+    applyFace("--font-sans", uiFont, DEFAULT_SANS_STACK);
+    applyFace("--font-mono", monoFont, DEFAULT_MONO_STACK);
+    localStorage.setItem(STORAGE_KEYS.uiFont, uiFont);
+    localStorage.setItem(STORAGE_KEYS.monoFont, monoFont);
+  }, [monoFont, uiFont]);
+
+  // The font list is fetched once per run; the native side caches its scan
+  // after the first call. The browser preview cannot enumerate fonts and
+  // simply offers the default.
+  useEffect(() => {
+    if (!isTauri()) return;
+    let cancelled = false;
+    void invoke<SystemFonts>("list_system_fonts")
+      .then((fonts) => {
+        if (!cancelled) setSystemFonts(fonts);
+      })
+      .catch(() => {
+        if (!cancelled) setSystemFonts({ families: [], monospace: [] });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // A stored choice survives only while its font is still installed. The CSS
+  // would fall through to the stock stack either way; dropping the stale value
+  // also keeps the dropdown honest. Runs only with a fetched list, so a
+  // preview (or a failed scan) never wipes a valid choice.
+  useEffect(() => {
+    if (!systemFonts) return;
+    setUiFont((current) => resolveStoredFont(current, systemFonts.families));
+    setMonoFont((current) => resolveStoredFont(current, systemFonts.monospace));
+  }, [systemFonts]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.playlist, JSON.stringify(items));
@@ -908,6 +985,32 @@ function App() {
     { value: "en", label: "English" },
   ];
 
+  // The font dropdowns list the system's families; every option previews in
+  // its own face, because choosing type by name alone is guessing.
+  const uiFontOptions = useMemo<ComboboxOption[]>(
+    () => [
+      { value: "", label: strings.fontDefault },
+      ...(systemFonts?.families ?? []).map((family) => ({
+        value: family,
+        label: family,
+        style: { fontFamily: resolveFontStack(family, DEFAULT_SANS_STACK) } as CSSProperties,
+      })),
+    ],
+    [strings.fontDefault, systemFonts],
+  );
+
+  const monoFontOptions = useMemo<ComboboxOption[]>(
+    () => [
+      { value: "", label: strings.fontDefault },
+      ...(systemFonts?.monospace ?? []).map((family) => ({
+        value: family,
+        label: family,
+        style: { fontFamily: resolveFontStack(family, DEFAULT_MONO_STACK) } as CSSProperties,
+      })),
+    ],
+    [strings.fontDefault, systemFonts],
+  );
+
   const speedOptions = useMemo(
     () => SPEED_STEPS.map((step) => ({ value: String(step), label: `${step}x` })),
     [],
@@ -1168,59 +1271,93 @@ function App() {
                 </ScrollArea>
               </>
             ) : (
-              <ScrollArea className="panel-body settings-content">
-                <SettingSection icon={<Palette size={14} />} title={strings.appearance}>
-                  <div className="setting-row">
-                    <span className="setting-row-label">{strings.theme}</span>
-                    <Combobox value={theme} options={themeOptions} onChange={(next) => setTheme(next as Theme)} label={strings.theme} />
-                  </div>
-                  <div className="setting-row">
-                    <span className="setting-row-label">{strings.language}</span>
-                    <Combobox value={language} options={languageOptions} onChange={(next) => setLanguage(next as Language)} label={strings.language} />
-                  </div>
-                </SettingSection>
-                <SettingSection icon={<SlidersHorizontal size={14} />} title={strings.playback}>
-                  <div className="range-setting"><div className="setting-label"><span>{strings.seekStep}</span><strong className="num">{seekStep} {strings.seconds}</strong></div><input type="range" min="5" max="60" step="5" value={seekStep} onChange={(event) => setSeekStep(Number(event.target.value))} style={{ "--progress": `${((seekStep - 5) / 55) * 100}%` } as CSSProperties} /></div>
-                  <div className="setting-label"><span>{strings.playbackMode}</span></div>
-                  <div className="mode-list">{playbackOptions.map(({ key, label, icon: Icon }) => <button key={key} className={playbackMode === key ? "selected" : ""} onClick={() => setPlaybackMode(key)}><span><Icon size={15} />{label}</span>{playbackMode === key && <Zap size={13} />}</button>)}</div>
-                  <ToggleRow label={strings.clearHistory} checked={autoClearHistory} onChange={setAutoClearHistory} />
-                </SettingSection>
-                <SettingSection
-                  icon={<RefreshCw size={14} />}
-                  title={strings.update}
-                  action={isTauri() ? (
-                    <button className="ghost-button" onClick={() => void runUpdateCheck(true, previewUpdates)} disabled={updateBusy}>
-                      <RefreshCw size={12} />
-                      {updateStatus === "checking" ? strings.checking : strings.checkUpdate}
+              <div className="settings-layout">
+                <nav className="settings-nav" aria-label={strings.settings}>
+                  {settingsSections.map(({ id, icon: Icon, label }) => (
+                    <button
+                      key={id}
+                      type="button"
+                      className={settingsSection === id ? "selected" : ""}
+                      aria-current={settingsSection === id ? "true" : undefined}
+                      onClick={() => setSettingsSection(id)}
+                    >
+                      <Icon size={14} />
+                      <span>{label}</span>
                     </button>
-                  ) : undefined}
-                >
-                  <ToggleRow label={strings.autoUpdate} checked={autoUpdate} onChange={setAutoUpdate} />
-                  <ToggleRow label={strings.previewUpdates} checked={previewUpdates} onChange={setPreviewUpdates} />
-                  {isTauri() && (updateStatusText !== "" || available !== null || blockedPreview !== null) && (
-                    <div className="update-block">
-                      {updateStatusText && <p className={`update-status ${updateStatus === "error" ? "error" : ""}`}>{updateStatusText}</p>}
-                      {available && <p className="update-status"><strong>v{available.version}</strong> · {strings.updateAvailable}</p>}
-                      {blockedPreview && <p className="update-status"><strong>v{blockedPreview}</strong> · {strings.previewTag}</p>}
-                      {(available !== null || blockedPreview !== null) && (
-                        <button className="ghost-button" onClick={() => setUpdateDialogOpen(true)}>
-                          <Info size={12} />
-                          {strings.viewDetails}
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </SettingSection>
-                <SettingSection icon={<Command size={14} />} title={strings.shortcuts}>
-                  {SHORTCUT_ORDER.map((id) => (
-                    <ShortcutRow key={id} keys={shortcutKeys(id, platform)} label={shortcutLabels[id]} />
                   ))}
-                </SettingSection>
-                <SettingSection icon={<Info size={14} />} title={strings.about}>
-                  <div className="about-row"><span>{strings.version}</span><strong className="num">v{appVersion}</strong></div>
-                  <div className="about-row"><span>{strings.repository}</span><strong className="about-repo">{PROJECT.repository}</strong></div>
-                </SettingSection>
-              </ScrollArea>
+                </nav>
+                <ScrollArea className="panel-body settings-content">
+                  {settingsSection === "appearance" && (
+                    <SettingSection icon={<Palette size={14} />} title={strings.appearance}>
+                      <div className="setting-row">
+                        <span className="setting-row-label">{strings.theme}</span>
+                        <Combobox value={theme} options={themeOptions} onChange={(next) => setTheme(next as Theme)} label={strings.theme} />
+                      </div>
+                      <div className="setting-row">
+                        <span className="setting-row-label">{strings.language}</span>
+                        <Combobox value={language} options={languageOptions} onChange={(next) => setLanguage(next as Language)} label={strings.language} />
+                      </div>
+                      <div className="setting-row">
+                        <span className="setting-row-label">{strings.uiFont}</span>
+                        <Combobox value={uiFont} options={uiFontOptions} onChange={setUiFont} label={strings.uiFont} />
+                      </div>
+                      <div className="setting-row">
+                        <span className="setting-row-label">{strings.monoFont}</span>
+                        <Combobox value={monoFont} options={monoFontOptions} onChange={setMonoFont} label={strings.monoFont} />
+                      </div>
+                    </SettingSection>
+                  )}
+                  {settingsSection === "playback" && (
+                    <SettingSection icon={<SlidersHorizontal size={14} />} title={strings.playback}>
+                      <div className="range-setting"><div className="setting-label"><span>{strings.seekStep}</span><strong className="num">{seekStep} {strings.seconds}</strong></div><input type="range" min="5" max="60" step="5" value={seekStep} onChange={(event) => setSeekStep(Number(event.target.value))} style={{ "--progress": `${((seekStep - 5) / 55) * 100}%` } as CSSProperties} /></div>
+                      <div className="setting-label"><span>{strings.playbackMode}</span></div>
+                      <div className="mode-list">{playbackOptions.map(({ key, label, icon: Icon }) => <button key={key} className={playbackMode === key ? "selected" : ""} onClick={() => setPlaybackMode(key)}><span><Icon size={15} />{label}</span>{playbackMode === key && <Zap size={13} />}</button>)}</div>
+                      <ToggleRow label={strings.clearHistory} checked={autoClearHistory} onChange={setAutoClearHistory} />
+                    </SettingSection>
+                  )}
+                  {settingsSection === "update" && (
+                    <SettingSection
+                      icon={<RefreshCw size={14} />}
+                      title={strings.update}
+                      action={isTauri() ? (
+                        <button className="ghost-button" onClick={() => void runUpdateCheck(true, previewUpdates)} disabled={updateBusy}>
+                          <RefreshCw size={12} />
+                          {updateStatus === "checking" ? strings.checking : strings.checkUpdate}
+                        </button>
+                      ) : undefined}
+                    >
+                      <ToggleRow label={strings.autoUpdate} checked={autoUpdate} onChange={setAutoUpdate} />
+                      <ToggleRow label={strings.previewUpdates} checked={previewUpdates} onChange={setPreviewUpdates} />
+                      {isTauri() && (updateStatusText !== "" || available !== null || blockedPreview !== null) && (
+                        <div className="update-block">
+                          {updateStatusText && <p className={`update-status ${updateStatus === "error" ? "error" : ""}`}>{updateStatusText}</p>}
+                          {available && <p className="update-status"><strong>v{available.version}</strong> · {strings.updateAvailable}</p>}
+                          {blockedPreview && <p className="update-status"><strong>v{blockedPreview}</strong> · {strings.previewTag}</p>}
+                          {(available !== null || blockedPreview !== null) && (
+                            <button className="ghost-button" onClick={() => setUpdateDialogOpen(true)}>
+                              <Info size={12} />
+                              {strings.viewDetails}
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </SettingSection>
+                  )}
+                  {settingsSection === "shortcuts" && (
+                    <SettingSection icon={<Command size={14} />} title={strings.shortcuts}>
+                      {SHORTCUT_ORDER.map((id) => (
+                        <ShortcutRow key={id} keys={shortcutKeys(id, platform)} label={shortcutLabels[id]} />
+                      ))}
+                    </SettingSection>
+                  )}
+                  {settingsSection === "about" && (
+                    <SettingSection icon={<Info size={14} />} title={strings.about}>
+                      <div className="about-row"><span>{strings.version}</span><strong className="num">v{appVersion}</strong></div>
+                      <div className="about-row"><span>{strings.repository}</span><strong className="about-repo">{PROJECT.repository}</strong></div>
+                    </SettingSection>
+                  )}
+                </ScrollArea>
+              </div>
             )}
           </aside>
         </>
@@ -1449,7 +1586,7 @@ function ShortcutRow({ keys, label }: { keys: string[]; label: string }) {
   return <div className="shortcut-row"><span>{label}</span><div>{keys.map((key) => <kbd key={key}>{key}</kbd>)}</div></div>;
 }
 
-type ComboboxOption = { value: string; label: string };
+type ComboboxOption = { value: string; label: string; style?: CSSProperties };
 
 /**
  * Scroll container with an overlay scrollbar.
@@ -1571,7 +1708,8 @@ function ScrollArea({
 }
 
 /**
- * Dropdown listbox for a small, fixed set of choices.
+ * Dropdown listbox — for a fixed handful of choices (theme, speed) and for the
+ * system's full font list, which runs hundreds long and scrolls.
  *
  * Implemented as a real combobox so the trigger keeps focus and the active
  * option is tracked with `aria-activedescendant`. Keys it handles are stopped
@@ -1688,7 +1826,7 @@ function Combobox({
               onMouseEnter={() => setActive(index)}
               onClick={() => commit(index)}
             >
-              <span>{option.label}</span>
+              <span style={option.style}>{option.label}</span>
               {option.value === value && <Check size={12} aria-hidden="true" />}
             </li>
           ))}

@@ -42,6 +42,8 @@ export const STORAGE_KEYS = {
   previewUpdates: "mirror-preview-updates",
   autoClearHistory: "mirror-auto-clear-history",
   history: "mirror-history",
+  uiFont: "mirror-ui-font",
+  monoFont: "mirror-mono-font",
 } as const;
 
 /** Minimal read/write surface so tests can pass a fake store instead of jsdom. */
@@ -85,6 +87,45 @@ export function isSupportedVideo(name: string): boolean {
 export function getInitialTheme(store: KeyValueStore): Theme {
   const stored = store.getItem(STORAGE_KEYS.theme);
   return stored === "dark" || stored === "light" || stored === "system" ? stored : "dark";
+}
+
+/** The default UI face, identical to `--font-sans` in styles.css (a test in
+ *  typography.test.ts fails if the two drift apart). */
+export const DEFAULT_SANS_STACK =
+  'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans", sans-serif';
+
+/** The default counting face, identical to `--font-mono` in styles.css. */
+export const DEFAULT_MONO_STACK = 'ui-monospace, "Cascadia Mono", Consolas, SFMono-Regular, Menlo, monospace';
+
+/** Reads a free-form persisted string; a missing key means "not set". */
+export function getInitialString(store: KeyValueStore, key: string): string {
+  return store.getItem(key) ?? "";
+}
+
+/**
+ * The CSS `font-family` value for a chosen font.
+ *
+ * The chosen family goes first and the platform stack follows it, so a missing
+ * glyph — or a font uninstalled after the choice was made — falls back to the
+ * stock face instead of a serif default. An empty choice is the stack itself.
+ */
+export function resolveFontStack(chosen: string, fallback: string): string {
+  const family = chosen.trim();
+  if (!family) return fallback;
+  const escaped = family.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  return `"${escaped}", ${fallback}`;
+}
+
+/**
+ * Keeps a stored font choice only while the system still has that font.
+ *
+ * The CSS would fall through to the stock stack for an uninstalled font either
+ * way; dropping the stale choice also makes the dropdown tell the truth. Only
+ * call this with a list that was actually fetched — an empty fetch (browser
+ * preview) must not wipe a valid choice.
+ */
+export function resolveStoredFont(stored: string, available: string[]): string {
+  return stored && available.includes(stored) ? stored : "";
 }
 
 export function getInitialLanguage(store: KeyValueStore): Language {

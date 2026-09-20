@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import stylesheet from "../styles.css?raw";
+import { DEFAULT_MONO_STACK, DEFAULT_SANS_STACK } from "./player";
 
 /**
  * Guards the type scale.
@@ -62,6 +63,14 @@ describe("fonts", () => {
     expect(value(":root", "--font-mono")).toContain("Consolas");
     // The base face goes through the token, or the two can drift apart.
     expect(value(":root", "font-family")).toBe("var(--font-sans)");
+  });
+
+  it("keeps the stylesheet stacks identical to the ones the font settings build on", () => {
+    // A chosen font is applied as `"Chosen", <default stack>`, with the default
+    // spelled out in player.ts. If the stylesheet copy changes there, the
+    // fallback after a chosen font silently stops matching the no-choice case.
+    expect(value(":root", "--font-sans")).toBe(DEFAULT_SANS_STACK);
+    expect(value(":root", "--font-mono")).toBe(DEFAULT_MONO_STACK);
   });
 
   it("sets everything that counts in the mono face", () => {

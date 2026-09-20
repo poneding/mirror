@@ -262,11 +262,16 @@ a request to play, so the user starts it. Adding a file, picking a playlist or
 history row, or moving to another track still plays that item. `resolveAutoplay`
 (`lib/player.ts`) owns this rule.
 
-**Settings panel**: sections are 外观 / 播放 / 更新 / 快捷键 / 关于. Section icons are
+**Settings panel**: a rail on the left switches between the five sections
+(外观 / 播放 / 更新 / 快捷键 / 关于); the body shows the selected one alone, so
+reaching 关于 no longer means scrolling past the other four. Section icons are
 plain glyphs with no badge behind them. The update check button sits on the
 section title row (via the `action` slot of `SettingSection`); the auto-check
 preference, the preview-build preference and a 查看详情 button in the body.
-Playback speed, theme, and language are dropdowns. The release notes are not
+Playback speed, theme, and language are dropdowns; so are the two font
+choices (界面字体 / 等宽字体), whose lists are the system's installed fonts
+enumerated by the `list_system_fonts` command and cached for the process —
+every option previews in its own face. The release notes are not
 rendered here — they belong to the update dialog, below.
 
 **Update dialog**: the result of a check is a modal, not a paragraph in the

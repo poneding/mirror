@@ -1,3 +1,6 @@
+use serde::Serialize;
+use std::collections::HashSet;
+use std::sync::OnceLock;
 use tauri::{LogicalSize, Manager, Size, Window};
 
 #[cfg(target_os = "windows")]
@@ -115,6 +118,64 @@ fn set_window_fullscreen(window: Window, fullscreen: bool) -> Result<(), String>
     Ok(())
 }
 
+/// The system's installed fonts, split into the two lists the settings panel
+/// offers: every family, and the monospace subset.
+#[derive(Clone, Serialize)]
+struct SystemFonts {
+    families: Vec<String>,
+    monospace: Vec<String>,
+}
+
+/// Builds the font dropdown lists from `(family, is-monospace)` pairs.
+///
+/// A family repeats once per face (regular, bold, italic…), so entries are
+/// deduplicated case-insensitively and sorted the way a person scans a list —
+/// `arial` before `Cascadia Code`, not wherever byte order puts capitals.
+fn font_lists(faces: impl IntoIterator<Item = (String, bool)>) -> SystemFonts {
+    let mut seen = HashSet::new();
+    let mut families = Vec::new();
+    let mut monospace = Vec::new();
+    for (family, is_monospace) in faces {
+        let family = family.trim();
+        if family.is_empty() || !seen.insert(family.to_lowercase()) {
+            continue;
+        }
+        let family = family.to_string();
+        if is_monospace {
+            monospace.push(family.clone());
+        }
+        families.push(family);
+    }
+    families.sort_by_key(|name| name.to_lowercase());
+    monospace.sort_by_key(|name| name.to_lowercase());
+    SystemFonts { families, monospace }
+}
+
+/// Enumerates the fonts the OS has installed. `fontdb` only reads the name and
+/// metrics tables, so this stays a fast scan rather than a full load.
+fn enumerate_system_fonts() -> SystemFonts {
+    let mut db = fontdb::Database::new();
+    db.load_system_fonts();
+    font_lists(db.faces().map(|face| {
+        // The first entry is the English (US) name unless the font lacks one.
+        let family = face
+            .families
+            .first()
+            .map(|(name, _)| name.clone())
+            .unwrap_or_default();
+        (family, face.monospaced)
+    }))
+}
+
+/// Installed fonts cannot change while Mirror runs, so enumerate once and
+/// reuse: the first settings render waits, later ones do not.
+static SYSTEM_FONTS: OnceLock<SystemFonts> = OnceLock::new();
+
+#[tauri::command]
+fn list_system_fonts() -> Result<SystemFonts, String> {
+    Ok(SYSTEM_FONTS.get_or_init(enumerate_system_fonts).clone())
+}
+
 #[cfg(target_os = "windows")]
 fn apply_glass(window: &tauri::WebviewWindow) {
     use window_vibrancy::apply_acrylic;
@@ -149,7 +210,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             resize_to_video,
             set_window_pinned,
-            set_window_fullscreen
+            set_window_fullscreen,
+            list_system_fonts
         ])
         .run(tauri::generate_context!())
         .expect("error while running Mirror");
@@ -246,5 +308,34 @@ mod tests {
         let (width, height) = fitted_size(2560.0, 1080.0).unwrap();
         assert!((width / height - 2560.0 / 1080.0).abs() < 0.01);
         assert!((width - 1120.0).abs() < 0.01, "width was {width}");
+    }
+
+    #[test]
+    fn font_lists_dedup_sort_and_split() {
+        let fonts = font_lists([
+            ("Segoe UI".into(), false),
+            ("Segoe UI".into(), false), // the same family in another face
+            ("Cascadia Code".into(), true),
+            ("Cascadia Code".into(), true), // its italic face
+            ("Consolas".into(), true),
+            ("arial".into(), false),
+            ("   ".into(), false), // a face with no usable family name
+        ]);
+        assert_eq!(
+            fonts.families,
+            ["arial", "Cascadia Code", "Consolas", "Segoe UI"]
+        );
+        assert_eq!(fonts.monospace, ["Cascadia Code", "Consolas"]);
+        assert!(fonts
+            .monospace
+            .iter()
+            .all(|mono| fonts.families.contains(mono)));
+    }
+
+    #[test]
+    fn font_lists_tolerate_an_empty_collection() {
+        let fonts = font_lists([]);
+        assert!(fonts.families.is_empty());
+        assert!(fonts.monospace.is_empty());
     }
 }
