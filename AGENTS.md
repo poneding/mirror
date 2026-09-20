@@ -132,6 +132,19 @@ The Makefile targets the actual development environment, verified:
 - Keep frosted surfaces (`backdrop-filter`) on panels and overlays, never on the
   element that covers playing video: blurring the picture both looks muddy and
   costs frames.
+- All of them share one recipe — `--glass-blur`, `--glass-fill`,
+  `--glass-sheen` in `:root`, resolved against the per-theme primitives
+  (`--glass-strong`, `--glass-highlight`, `--glass-sheen-top`). `--glass-strong`
+  is a film over a heavily blurred, saturated picture, not a paint: near-opaque
+  values (it was `.9`) hide the blur and every panel, bar and overlay reads as
+  flat white. Because that film is translucent, the muted ink is one zinc step
+  stronger than the palette default (see the comment in `:root`) — secondary
+  text sits on glass everywhere and has to stay legible over an unknown picture.
+- The control bar's own glass lives on `.player-chrome::before`, not on the bar.
+  An element with `backdrop-filter` is the backdrop root for its descendants, so
+  a filter on the bar left the speed dropdown filtering an empty backdrop: the
+  picture behind the menu stayed razor sharp and it read as cellophane. Do not
+  move it back onto the element.
 
 ## Behaviour contracts
 
