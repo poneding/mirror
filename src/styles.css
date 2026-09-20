@@ -761,7 +761,7 @@ input:focus-visible {
 }
 
 .selected .playlist-index { color: var(--primary-foreground); background: var(--primary); }
-.playlist-name { display: flex; flex-direction: column; min-width: 0; gap: 4px; }
+.playlist-name { display: flex; flex: 1; flex-direction: column; min-width: 0; gap: 4px; }
 
 .playlist-name strong {
   overflow: hidden;
@@ -772,7 +772,9 @@ input:focus-visible {
   white-space: nowrap;
 }
 
-.playlist-name small { color: var(--muted-foreground); font-size: 10px; }
+/* Two-ended meta line: media type on the left, duration on the right. The
+   history row keeps a plain text node here, which stays at the start. */
+.playlist-name small { display: flex; justify-content: space-between; gap: 8px; color: var(--muted-foreground); font-size: 10px; }
 
 .playlist-empty {
   display: flex;

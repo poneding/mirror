@@ -140,6 +140,20 @@ export function parseStoredPlaylist(raw: string | null): MediaItem[] {
   }
 }
 
+export type MediaKind = "audio" | "video";
+
+/**
+ * Whether an item has a picture to show.
+ *
+ * The media element reports `0 × 0` for a file whose container carries no video
+ * track, so a probed item with no dimensions is audio-only. An item that has not
+ * been probed yet stays a video: the picker only offers video files, and the
+ * label must not claim otherwise before the metadata says so.
+ */
+export function mediaKind(item: Pick<MediaItem, "width" | "height">): MediaKind {
+  return item.width === 0 && item.height === 0 ? "audio" : "video";
+}
+
 /**
  * Picks the id that should be active for a playlist.
  *

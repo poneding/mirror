@@ -29,6 +29,7 @@ import {
   isPreviewVersion,
   isSupportedVideo,
   isTypingTarget,
+  mediaKind,
   nextIndex,
   parseHistory,
   parseStoredPlaylist,
@@ -246,6 +247,21 @@ describe("resolveActiveId", () => {
 
   it("returns null for an empty playlist", () => {
     expect(resolveActiveId([], "a")).toBeNull();
+  });
+});
+
+describe("mediaKind", () => {
+  it("calls a probed item without video dimensions audio", () => {
+    expect(mediaKind({ width: 0, height: 0 })).toBe("audio");
+  });
+
+  it("calls an item with video dimensions a video", () => {
+    expect(mediaKind({ width: 1920, height: 1080 })).toBe("video");
+  });
+
+  it("keeps unprobed items labelled as video", () => {
+    expect(mediaKind({})).toBe("video");
+    expect(mediaKind({ width: 1920 })).toBe("video");
   });
 });
 

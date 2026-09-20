@@ -68,6 +68,7 @@ import {
   historyToMediaItem,
   isSupportedVideo,
   isTypingTarget,
+  mediaKind,
   nextIndex,
   parseHistory,
   parseStoredPlaylist,
@@ -100,6 +101,8 @@ const copy = {
     settings: "设置",
     noVideos: "播放列表还是空的",
     addFirst: "添加一个视频，开始你的第一段播放",
+    video: "视频",
+    audio: "音频",
     appearance: "外观",
     theme: "主题",
     dark: "深色",
@@ -174,6 +177,8 @@ const copy = {
     settings: "Settings",
     noVideos: "Your playlist is empty",
     addFirst: "Add a video to start your first session",
+    video: "Video",
+    audio: "Audio",
     appearance: "Appearance",
     theme: "Theme",
     dark: "Dark",
@@ -1053,7 +1058,10 @@ function App() {
                           <div className={`playlist-item ${item.id === activeId ? "selected" : ""}`} key={item.id}>
                             <button className="playlist-select" onClick={() => selectItem(item.id)}>
                               <span className="playlist-index">{item.id === activeId ? <Play size={11} fill="currentColor" /> : String(index + 1).padStart(2, "0")}</span>
-                              <span className="playlist-name"><strong>{item.name}</strong><small>{item.duration ? formatTime(item.duration) : "Video"}</small></span>
+                              <span className="playlist-name">
+                                <strong>{item.name}</strong>
+                                <small><span>{mediaKind(item) === "audio" ? strings.audio : strings.video}</span><span>{item.duration > 0 ? formatTime(item.duration) : "--:--"}</span></small>
+                              </span>
                             </button>
                             <button className="item-remove" onClick={() => removeItem(item.id)} title={strings.removeItem} aria-label={`${strings.removeItem}: ${item.name}`}><X size={13} /></button>
                           </div>
