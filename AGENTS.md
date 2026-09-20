@@ -168,6 +168,14 @@ Note the modifier split: on macOS track/speed use **cmd**, on Windows/Linux they
 use **alt**. Panel shortcuts use **cmd**/**ctrl**. This is implemented in
 `resolveShortcut` and covered by tests — do not "simplify" it to one modifier.
 
+A plain arrow is a seek on a tap and a scan on a hold: `←` plays at 0.25x, `→` at
+2x, and the chosen rate comes back on release. The scan starts only after
+`HOLD_SPEED_DELAY_MS`, so the seek fires on key-up; the auto-repeat keydown
+stream is dropped rather than re-seeking, which is why the gesture lives in
+`advanceSeekHold` (`lib/player.ts`) and `App.tsx` only runs the timer and writes
+`playbackRate`. A scan never touches `speed` or what it persists, and losing the
+window ends it.
+
 `Esc` precedence: update dialog → settings panel → playlist panel → exit
 fullscreen.
 

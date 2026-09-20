@@ -43,6 +43,7 @@ import {
   CHROME_HIDE_DELAY_MS,
   FALLBACK_VERSION,
   HISTORY_WRITE_INTERVAL_MS,
+  HOLD_SPEED_DELAY_MS,
   OSD_DURATION_MS,
   PROJECT,
   SHORTCUT_ORDER,
@@ -56,6 +57,8 @@ import {
   type Theme,
   type HistoryEntry,
   acceptsUpdate,
+  advanceSeekHold,
+  arrowSeekAmount,
   clamp,
   detectPlatform,
   fileNameFromPath,
@@ -80,6 +83,7 @@ import {
   resolveEscape,
   resolveShortcut,
   resumePosition,
+  type SeekHoldState,
   shortcutKeys,
   snapSpeed,
   stepSpeed,
@@ -264,6 +268,9 @@ function App() {
   const hideChromeTimer = useRef<number | undefined>(undefined);
   const osdTimer = useRef<number | undefined>(undefined);
   const historyWriteAt = useRef(0);
+  const holdTimer = useRef<number | undefined>(undefined);
+  /** The arrow key that is down, if any: a tap seeks, a hold scans. */
+  const seekHold = useRef<SeekHoldState>(null);
   const [items, setItems] = useState<MediaItem[]>(() => parseStoredPlaylist(localStorage.getItem(STORAGE_KEYS.playlist)));
   const [activeId, setActiveId] = useState<string | null>(() => localStorage.getItem(STORAGE_KEYS.activeId));
   /**
@@ -279,6 +286,8 @@ function App() {
   const [playbackMode, setPlaybackMode] = useState<PlaybackMode>(() => getInitialPlaybackMode(store));
   const [seekStep, setSeekStep] = useState(() => getInitialNumber(store, STORAGE_KEYS.seekStep, 10, 5, 60));
   const [speed, setSpeed] = useState(() => snapSpeed(getInitialNumber(store, STORAGE_KEYS.speed, 1, 0.25, 2)));
+  /** The momentary rate a held arrow is scanning at; `null` when it is not. */
+  const [holdRate, setHoldRate] = useState<number | null>(null);
   const [volume, setVolume] = useState(() => getInitialNumber(store, STORAGE_KEYS.volume, 0.8, 0, 1));
   const [isPinned, setIsPinned] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -479,9 +488,11 @@ function App() {
     if (decision.autoplay) void video.play().catch(() => setIsPlaying(false));
   }, [activeId, activeSource]);
 
+  /* A held arrow scans at a momentary rate that never touches the chosen speed,
+     so the gesture cannot leak into the setting or what it persists. */
   useEffect(() => {
-    if (videoRef.current) videoRef.current.playbackRate = speed;
-  }, [speed, activeId]);
+    if (videoRef.current) videoRef.current.playbackRate = holdRate ?? speed;
+  }, [speed, holdRate, activeId]);
 
   useEffect(() => {
     if (videoRef.current) videoRef.current.volume = volume;
@@ -540,9 +551,27 @@ function App() {
         case "toggle-play":
           togglePlay();
           return;
-        case "seek":
-          seekBy(shortcut.amount * seekStep);
+        case "seek": {
+          // A tap seeks, a hold scans; the delay decides which, so a quick
+          // press still seeks and the timer is armed exactly once.
+          if (!videoRef.current) return;
+          const pressed = advanceSeekHold(seekHold.current, {
+            type: "press",
+            amount: shortcut.amount,
+            repeat: event.repeat,
+          });
+          seekHold.current = pressed.state;
+          if (pressed.step.type !== "arm") return;
+          window.clearTimeout(holdTimer.current);
+          holdTimer.current = window.setTimeout(() => {
+            const elapsed = advanceSeekHold(seekHold.current, { type: "elapsed" });
+            seekHold.current = elapsed.state;
+            if (elapsed.step.type !== "scan") return;
+            setHoldRate(elapsed.step.rate);
+            flashOsd(<Zap size={16} />, `${strings.osdSpeed} ${elapsed.step.rate}x`);
+          }, HOLD_SPEED_DELAY_MS);
           return;
+        }
         case "volume":
           applyVolume(volume + shortcut.amount * 0.05);
           return;
@@ -561,8 +590,39 @@ function App() {
       }
     };
 
+    /**
+     * The held key ends the gesture no matter what modifiers are down: pressing
+     * Alt mid-scan must not leave the scan running past the release.
+     */
+    const handleKeyUp = (event: KeyboardEvent) => {
+      const state = seekHold.current;
+      if (!state) return;
+      const amount = arrowSeekAmount(event.key);
+      if (amount === null || amount !== state.amount) return;
+      const released = advanceSeekHold(state, { type: "release", amount });
+      seekHold.current = released.state;
+      window.clearTimeout(holdTimer.current);
+      if (released.step.type === "seek") seekBy(released.step.amount * seekStep);
+      else if (released.step.type === "end") setHoldRate(null);
+    };
+
+    /* Losing the window means the key-up never arrives, so the scan would hold
+       the picture at a rate the user is no longer holding. */
+    const handleBlur = () => {
+      const cancelled = advanceSeekHold(seekHold.current, { type: "cancel" });
+      seekHold.current = cancelled.state;
+      window.clearTimeout(holdTimer.current);
+      if (cancelled.step.type === "end") setHoldRate(null);
+    };
+
     window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    window.addEventListener("blur", handleBlur);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+      window.removeEventListener("blur", handleBlur);
+    };
   });
 
   /* The pointer is the one gesture that also restarts the clock, so the bars

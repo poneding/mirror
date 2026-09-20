@@ -324,6 +324,82 @@ export type ShortcutKeyEvent = {
   shiftKey?: boolean;
 };
 
+/** Momentary rates a held arrow key scans at: ← slows the picture, → speeds it up. */
+export const HOLD_SPEED_BACK = 0.25;
+export const HOLD_SPEED_FORWARD = 2;
+
+/** How long an arrow stays down before the tap becomes a scan, in milliseconds. */
+export const HOLD_SPEED_DELAY_MS = 300;
+
+/** The rate a held arrow scans at. */
+export function holdSpeed(amount: 1 | -1): number {
+  return amount === 1 ? HOLD_SPEED_FORWARD : HOLD_SPEED_BACK;
+}
+
+/** The seek direction an arrow key carries; `null` for any other key. */
+export function arrowSeekAmount(key: string): 1 | -1 | null {
+  if (key === "ArrowRight") return 1;
+  if (key === "ArrowLeft") return -1;
+  return null;
+}
+
+/**
+ * The hold-to-scan gesture on the plain arrow keys.
+ *
+ * A tap still seeks; holding past `HOLD_SPEED_DELAY_MS` turns the same key into
+ * a momentary scan at `holdSpeed`, and the chosen rate comes back on release.
+ * The gesture lives here so the tap/hold split, the auto-repeat stream and a
+ * release of the other arrow are decided in one testable place; `App.tsx` only
+ * runs the timer and writes the video's `playbackRate`.
+ */
+export type SeekHoldState = { amount: 1 | -1; scanning: boolean } | null;
+
+export type SeekHoldEvent =
+  | { type: "press"; amount: 1 | -1; repeat: boolean }
+  | { type: "release"; amount: 1 | -1 }
+  | { type: "elapsed" }
+  | { type: "cancel" };
+
+export type SeekHoldStep =
+  | { type: "arm" }
+  | { type: "scan"; rate: number }
+  | { type: "seek"; amount: 1 | -1 }
+  | { type: "end" }
+  | { type: "ignore" };
+
+/**
+ * Advances the gesture.
+ *
+ * The returned `step` is the one thing the caller owes the player: start the
+ * hold timer, apply the scan rate, seek, or restore the chosen rate. The key
+ * that went down owns the gesture, so auto-repeat and the other arrow are
+ * dropped instead of restarting it.
+ */
+export function advanceSeekHold(
+  state: SeekHoldState,
+  event: SeekHoldEvent,
+): { state: SeekHoldState; step: SeekHoldStep } {
+  switch (event.type) {
+    case "press":
+      if (state || event.repeat) return { state, step: { type: "ignore" } };
+      return { state: { amount: event.amount, scanning: false }, step: { type: "arm" } };
+    case "elapsed":
+      if (!state || state.scanning) return { state, step: { type: "ignore" } };
+      return {
+        state: { amount: state.amount, scanning: true },
+        step: { type: "scan", rate: holdSpeed(state.amount) },
+      };
+    case "release":
+      if (!state || state.amount !== event.amount) return { state, step: { type: "ignore" } };
+      return {
+        state: null,
+        step: state.scanning ? { type: "end" } : { type: "seek", amount: state.amount },
+      };
+    case "cancel":
+      return { state: null, step: state ? { type: "end" } : { type: "ignore" } };
+  }
+}
+
 /**
  * Maps a key event to a player command, applying the platform-specific
  * modifier layout:
@@ -355,8 +431,8 @@ export function resolveShortcut(
     if (speedModifier && event.key === "ArrowDown") return { type: "speed", direction: -1 };
   }
 
-  if (event.key === "ArrowRight") return { type: "seek", amount: 1 };
-  if (event.key === "ArrowLeft") return { type: "seek", amount: -1 };
+  const seekAmount = arrowSeekAmount(event.key);
+  if (seekAmount !== null) return { type: "seek", amount: seekAmount };
   if (event.key === "ArrowUp") return { type: "volume", amount: 1 };
   if (event.key === "ArrowDown") return { type: "volume", amount: -1 };
 

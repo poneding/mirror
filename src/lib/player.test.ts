@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   CHROME_HIDE_DELAY_MS,
   HISTORY_LIMIT,
+  HOLD_SPEED_BACK,
+  HOLD_SPEED_DELAY_MS,
+  HOLD_SPEED_FORWARD,
   type HistoryEntry,
   historyToMediaItem,
   type KeyValueStore,
@@ -15,6 +18,8 @@ import {
   STORAGE_KEYS,
   WINDOW_FIT,
   acceptsUpdate,
+  advanceSeekHold,
+  arrowSeekAmount,
   clamp,
   detectPlatform,
   extensionOf,
@@ -26,6 +31,7 @@ import {
   getInitialNumber,
   getInitialPlaybackMode,
   getInitialTheme,
+  holdSpeed,
   isPreviewVersion,
   isSupportedVideo,
   isTypingTarget,
@@ -482,6 +488,85 @@ describe("resolveShortcut shared keys", () => {
   it("returns null for unrelated keys", () => {
     expect(resolveShortcut({ key: "a" }, "windows")).toBeNull();
     expect(resolveShortcut({ key: "F5" }, "mac")).toBeNull();
+  });
+});
+
+describe("hold-to-scan on the arrow keys", () => {
+  it("scans slowly backwards and fast forwards", () => {
+    expect(holdSpeed(-1)).toBe(HOLD_SPEED_BACK);
+    expect(holdSpeed(1)).toBe(HOLD_SPEED_FORWARD);
+    expect(holdSpeed(-1)).toBeLessThan(1);
+    expect(holdSpeed(1)).toBeGreaterThan(1);
+  });
+
+  it("maps only the left and right arrows", () => {
+    expect(arrowSeekAmount("ArrowLeft")).toBe(-1);
+    expect(arrowSeekAmount("ArrowRight")).toBe(1);
+    expect(arrowSeekAmount("ArrowUp")).toBeNull();
+    expect(arrowSeekAmount(" ")).toBeNull();
+  });
+
+  // The hold is a gesture on the seek binding, not a separate key: a pressed
+  // arrow still resolves to a seek, which is what the settings row advertises.
+  it("still resolves the plain arrows to seek", () => {
+    expect(resolveShortcut({ key: "ArrowRight" }, "windows")).toEqual({ type: "seek", amount: 1 });
+    expect(resolveShortcut({ key: "ArrowLeft", shiftKey: true }, "mac")).toEqual({ type: "seek", amount: -1 });
+  });
+
+  it("seeks when the key comes up before the delay", () => {
+    const pressed = advanceSeekHold(null, { type: "press", amount: 1, repeat: false });
+    expect(pressed).toEqual({ state: { amount: 1, scanning: false }, step: { type: "arm" } });
+    expect(advanceSeekHold(pressed.state, { type: "release", amount: 1 })).toEqual({
+      state: null,
+      step: { type: "seek", amount: 1 },
+    });
+  });
+
+  it("scans once the delay elapses and restores on release", () => {
+    const pressed = advanceSeekHold(null, { type: "press", amount: -1, repeat: false });
+    const elapsed = advanceSeekHold(pressed.state, { type: "elapsed" });
+    expect(elapsed.state).toEqual({ amount: -1, scanning: true });
+    expect(elapsed.step).toEqual({ type: "scan", rate: HOLD_SPEED_BACK });
+    expect(advanceSeekHold(elapsed.state, { type: "release", amount: -1 })).toEqual({
+      state: null,
+      step: { type: "end" },
+    });
+  });
+
+  it("drops auto-repeat instead of restarting the gesture", () => {
+    const pressed = advanceSeekHold(null, { type: "press", amount: 1, repeat: false });
+    const repeated = advanceSeekHold(pressed.state, { type: "press", amount: 1, repeat: true });
+    expect(repeated).toEqual({ state: pressed.state, step: { type: "ignore" } });
+    // The press that started it still scans when the delay elapses.
+    expect(advanceSeekHold(repeated.state, { type: "elapsed" }).step).toEqual({ type: "scan", rate: 2 });
+  });
+
+  it("leaves the gesture with the key that started it", () => {
+    const pressed = advanceSeekHold(null, { type: "press", amount: 1, repeat: false });
+    const otherKey = advanceSeekHold(pressed.state, { type: "release", amount: -1 });
+    expect(otherKey).toEqual({ state: pressed.state, step: { type: "ignore" } });
+    expect(advanceSeekHold(otherKey.state, { type: "press", amount: -1, repeat: false })).toEqual({
+      state: pressed.state,
+      step: { type: "ignore" },
+    });
+  });
+
+  it("ends a scan when the window loses focus, without seeking", () => {
+    const pending = advanceSeekHold(null, { type: "press", amount: 1, repeat: false }).state;
+    const scanning = advanceSeekHold(pending, { type: "elapsed" }).state;
+    expect(advanceSeekHold(pending, { type: "cancel" })).toEqual({ state: null, step: { type: "end" } });
+    expect(advanceSeekHold(scanning, { type: "cancel" })).toEqual({ state: null, step: { type: "end" } });
+    expect(advanceSeekHold(null, { type: "cancel" })).toEqual({ state: null, step: { type: "ignore" } });
+  });
+
+  it("ignores events no press started", () => {
+    expect(advanceSeekHold(null, { type: "release", amount: 1 })).toEqual({ state: null, step: { type: "ignore" } });
+    expect(advanceSeekHold(null, { type: "elapsed" })).toEqual({ state: null, step: { type: "ignore" } });
+  });
+
+  it("waits long enough to tap and not long enough to feel stuck", () => {
+    expect(HOLD_SPEED_DELAY_MS).toBeGreaterThanOrEqual(200);
+    expect(HOLD_SPEED_DELAY_MS).toBeLessThanOrEqual(500);
   });
 });
 
