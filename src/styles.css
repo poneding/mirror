@@ -1086,6 +1086,89 @@ kbd {
   to { opacity: 1; transform: translate(50%, 0); }
 }
 
+/* ---------- update dialog ---------- */
+
+/* A plain scrim, no blur: the dialog is a modal over the picture, and blurring
+   the whole window is both muddy over video and expensive. The card is the
+   frosted surface, like the panels. */
+.dialog-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(9, 9, 11, .5);
+  cursor: pointer;
+}
+
+.update-dialog-layer {
+  position: absolute;
+  z-index: 30;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+
+.update-dialog {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(520px, calc(100% - 32px));
+  max-height: calc(100% - 48px);
+  padding: 14px 16px 12px;
+  border: 1px solid var(--glass-border-strong);
+  border-radius: 18px;
+  color: var(--foreground);
+  background: var(--glass-strong);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(28px) saturate(1.2);
+  animation: dialog-in .18s ease;
+}
+
+.update-dialog:focus { outline: none; }
+
+.dialog-header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.dialog-header h2 { margin: 0; font-size: 13px; font-weight: 600; }
+
+.dialog-version {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.dialog-version span { color: var(--muted-foreground); font-weight: 400; }
+
+.dialog-lead { margin: 0; color: var(--muted-foreground); font-size: 11px; line-height: 1.6; }
+
+.dialog-lead.error { color: var(--destructive); }
+
+/* The one child that gives way, so a long changelog scrolls inside the card
+   instead of growing it past the window. */
+.dialog-changelog { flex: 1 1 auto; min-height: 0; }
+
+.dialog-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* A hint under a toggle: quieter than the label it explains. */
+.setting-hint { margin: 2px 0 0; color: var(--muted-foreground); font-size: 10px; }
+
+@keyframes dialog-in {
+  from { opacity: 0; transform: translateY(6px) scale(.98); }
+  to { opacity: 1; transform: none; }
+}
+
 @media (max-width: 760px) {
   .titlebar { padding: 0 11px; }
   .titlebar-center { display: none; }

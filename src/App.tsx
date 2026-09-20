@@ -55,6 +55,7 @@ import {
   SUPPORTED_VIDEO_EXTENSIONS,
   type Theme,
   type HistoryEntry,
+  acceptsUpdate,
   clamp,
   detectPlatform,
   fileNameFromPath,
@@ -89,7 +90,7 @@ import logo from "./assets/logo.png";
 const isTauri = () => "__TAURI_INTERNALS__" in window;
 
 /** Where the update notice is in its lifecycle; `Update` holds the release itself. */
-type UpdateStatus = "idle" | "checking" | "current" | "installing" | "installed" | "error";
+type UpdateStatus = "idle" | "checking" | "current" | "preview" | "installing" | "installed" | "error";
 
 const copy = {
   zh: {
@@ -118,6 +119,8 @@ const copy = {
     repeatOne: "单项循环",
     repeatList: "列表循环",
     autoUpdate: "自动检查更新",
+    previewUpdates: "接收预览版更新",
+    previewHint: "alpha / beta 等预览版默认不接收",
     clearHistory: "自动清除播放记录",
     checkUpdate: "检查更新",
     checking: "检查中…",
@@ -127,6 +130,13 @@ const copy = {
     installing: "下载中",
     restartToApply: "更新已安装，重启应用后生效",
     updateFailed: "检查更新失败：",
+    viewDetails: "查看详情",
+    closeDialog: "关闭弹窗",
+    updateDetails: "更新详情",
+    previewTag: "预览版",
+    previewWithheld: "这是预览版（alpha / beta），当前设置不接收预览版更新。",
+    enablePreview: "开启并重新检查",
+    currentVersion: "当前版本",
     pinned: "窗口已置顶",
     pinWindow: "置顶窗口",
     shortcuts: "快捷键",
@@ -183,6 +193,8 @@ const copy = {
     repeatOne: "Repeat one",
     repeatList: "Repeat playlist",
     autoUpdate: "Check for updates automatically",
+    previewUpdates: "Accept preview builds",
+    previewHint: "alpha / beta builds are off by default",
     clearHistory: "Clear watch history automatically",
     checkUpdate: "Check for updates",
     checking: "Checking…",
@@ -192,6 +204,13 @@ const copy = {
     installing: "Downloading",
     restartToApply: "Update installed — restart Mirror to apply it",
     updateFailed: "Update check failed: ",
+    viewDetails: "View details",
+    closeDialog: "Close dialog",
+    updateDetails: "Update details",
+    previewTag: "Preview",
+    previewWithheld: "This is a preview build (alpha / beta), and preview updates are turned off.",
+    enablePreview: "Turn on and check again",
+    currentVersion: "Current version",
     pinned: "Window pinned",
     pinWindow: "Pin window",
     shortcuts: "Shortcuts",
@@ -223,6 +242,9 @@ const copy = {
     close: "Close",
   },
 } as const;
+
+/** One language's strings, so components can take the whole table. */
+type Copy = (typeof copy)[Language];
 
 const store = { getItem: (key: string) => localStorage.getItem(key) };
 
@@ -264,6 +286,7 @@ function App() {
   const [chromeVisible, setChromeVisible] = useState(true);
   const [toast, setToast] = useState("");
   const [autoUpdate, setAutoUpdate] = useState(() => getInitialBoolean(store, STORAGE_KEYS.autoUpdate, true));
+  const [previewUpdates, setPreviewUpdates] = useState(() => getInitialBoolean(store, STORAGE_KEYS.previewUpdates, false));
   const [autoClearHistory, setAutoClearHistory] = useState(() => getInitialBoolean(store, STORAGE_KEYS.autoClearHistory, false));
   const [isMaximized, setIsMaximized] = useState(false);
   const [osd, setOsd] = useState<{ icon: ReactNode; text: string } | null>(null);
@@ -274,6 +297,9 @@ function App() {
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>("idle");
   const [updateProgress, setUpdateProgress] = useState<number | null>(null);
   const [updateError, setUpdateError] = useState("");
+  /** A preview build the preference withheld, kept so the dialog can say why. */
+  const [blockedPreview, setBlockedPreview] = useState<string | null>(null);
+  const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
 
   const platform = useMemo(() => detectPlatform(navigator.userAgent, navigator.platform), []);
   /** macOS keeps its own window-control set; Windows/Linux get maximize too. */
@@ -300,21 +326,37 @@ function App() {
   /**
    * Asks the updater whether a newer release exists. The check on launch stays
    * quiet when it fails — Mirror is meant to work offline — while a check the
-   * user asked for reports what happened.
+   * user asked for reports what happened, in the update dialog.
+   *
+   * `allowPreview` is passed in rather than read from state so a caller can turn
+   * the preference on and re-check in the same tick, without the stale closure a
+   * captured `previewUpdates` would give it.
    */
-  const runUpdateCheck = useCallback(async (manual: boolean) => {
+  const runUpdateCheck = useCallback(async (manual: boolean, allowPreview: boolean) => {
     if (!isTauri()) return;
     setUpdateStatus("checking");
     setUpdateError("");
+    if (manual) setUpdateDialogOpen(true);
     try {
       const found = await check();
-      setAvailable(found);
-      setUpdateStatus(!found && manual ? "current" : "idle");
+      const offered = found !== null && acceptsUpdate(found.version, allowPreview);
+      setAvailable(offered ? found : null);
+      setBlockedPreview(found !== null && !offered ? found.version : null);
+      setUpdateStatus(found === null ? (manual ? "current" : "idle") : offered ? "idle" : "preview");
+      // An update worth acting on is worth interrupting for; a check nobody
+      // asked for says nothing in any other case.
+      if (offered && !manual) setUpdateDialogOpen(true);
     } catch (error) {
       setUpdateError(error instanceof Error ? error.message : String(error));
       setUpdateStatus(manual ? "error" : "idle");
     }
   }, []);
+
+  /** Turns preview builds on and re-checks, so the withheld release appears. */
+  const enablePreviewUpdates = useCallback(() => {
+    setPreviewUpdates(true);
+    void runUpdateCheck(true, true);
+  }, [runUpdateCheck]);
 
   /** Downloads the pending release and hands it to the OS installer. */
   const installUpdate = useCallback(async () => {
@@ -376,8 +418,8 @@ function App() {
   // for updates is the user's call, and `autoUpdate` is their answer.
   useEffect(() => {
     if (!autoUpdate) return;
-    void runUpdateCheck(false);
-  }, [autoUpdate, runUpdateCheck]);
+    void runUpdateCheck(false, previewUpdates);
+  }, [autoUpdate, previewUpdates, runUpdateCheck]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -396,8 +438,9 @@ function App() {
     localStorage.setItem(STORAGE_KEYS.speed, String(speed));
     localStorage.setItem(STORAGE_KEYS.volume, String(volume));
     localStorage.setItem(STORAGE_KEYS.autoUpdate, String(autoUpdate));
+    localStorage.setItem(STORAGE_KEYS.previewUpdates, String(previewUpdates));
     localStorage.setItem(STORAGE_KEYS.autoClearHistory, String(autoClearHistory));
-  }, [autoClearHistory, autoUpdate, language, playbackMode, seekStep, speed, volume]);
+  }, [autoClearHistory, autoUpdate, language, playbackMode, previewUpdates, seekStep, speed, volume]);
 
   useEffect(() => {
     setActiveId((current) => resolveActiveId(items, current));
@@ -478,13 +521,19 @@ function App() {
 
       event.preventDefault();
 
+      // Escape closes the topmost surface. While the dialog is open nothing else
+      // reaches the player either: a modal owns the keyboard, so Space must not
+      // toggle playback behind it.
+      if (shortcut.type === "escape") {
+        const outcome = resolveEscape(panel, isFullscreen, updateDialogOpen);
+        if (outcome.handled && "closeDialog" in outcome) setUpdateDialogOpen(false);
+        else if (outcome.handled && "close" in outcome) setPanel(null);
+        else if (outcome.handled && outcome.exitFullscreen) void toggleFullscreen();
+        return;
+      }
+      if (updateDialogOpen) return;
+
       switch (shortcut.type) {
-        case "escape": {
-          const outcome = resolveEscape(panel, isFullscreen);
-          if (outcome.handled && "close" in outcome) setPanel(null);
-          else if (outcome.handled && outcome.exitFullscreen) void toggleFullscreen();
-          return;
-        }
         case "toggle-play":
           togglePlay();
           return;
@@ -1056,27 +1105,25 @@ function App() {
                   icon={<RefreshCw size={14} />}
                   title={strings.update}
                   action={isTauri() ? (
-                    <button className="ghost-button" onClick={() => void runUpdateCheck(true)} disabled={updateBusy}>
+                    <button className="ghost-button" onClick={() => void runUpdateCheck(true, previewUpdates)} disabled={updateBusy}>
                       <RefreshCw size={12} />
                       {updateStatus === "checking" ? strings.checking : strings.checkUpdate}
                     </button>
                   ) : undefined}
                 >
                   <ToggleRow label={strings.autoUpdate} checked={autoUpdate} onChange={setAutoUpdate} />
-                  {isTauri() && (updateStatusText !== "" || available !== null) && (
+                  <ToggleRow label={strings.previewUpdates} checked={previewUpdates} onChange={setPreviewUpdates} />
+                  <p className="setting-hint">{strings.previewHint}</p>
+                  {isTauri() && (updateStatusText !== "" || available !== null || blockedPreview !== null) && (
                     <div className="update-block">
                       {updateStatusText && <p className={`update-status ${updateStatus === "error" ? "error" : ""}`}>{updateStatusText}</p>}
-                      {available && (
-                        <>
-                          <p className="update-status"><strong>v{available.version}</strong> · {strings.updateAvailable}</p>
-                          <Changelog body={available.body ?? ""} />
-                          {updateStatus !== "installed" && (
-                            <button className="update-button" onClick={() => void installUpdate()} disabled={updateBusy}>
-                              <Download size={14} />
-                              {updateStatus === "installing" ? strings.installing : strings.installUpdate}
-                            </button>
-                          )}
-                        </>
+                      {available && <p className="update-status"><strong>v{available.version}</strong> · {strings.updateAvailable}</p>}
+                      {blockedPreview && <p className="update-status"><strong>v{blockedPreview}</strong> · {strings.previewTag}</p>}
+                      {(available !== null || blockedPreview !== null) && (
+                        <button className="ghost-button" onClick={() => setUpdateDialogOpen(true)}>
+                          <Info size={12} />
+                          {strings.viewDetails}
+                        </button>
                       )}
                     </div>
                   )}
@@ -1104,6 +1151,22 @@ function App() {
       )}
 
       {toast && <div className="toast"><Trash2 size={14} /> {toast}</div>}
+
+      {updateDialogOpen && (
+        <UpdateDialog
+          strings={strings}
+          status={updateStatus}
+          currentVersion={appVersion}
+          available={available}
+          blockedPreview={blockedPreview}
+          progress={updateProgress}
+          error={updateError}
+          busy={updateBusy}
+          onClose={() => setUpdateDialogOpen(false)}
+          onInstall={() => void installUpdate()}
+          onEnablePreview={enablePreviewUpdates}
+        />
+      )}
     </main>
   );
 }
@@ -1122,12 +1185,143 @@ function SettingSection({ icon, title, action, children }: { icon: ReactNode; ti
 }
 
 /**
+ * The update check's own surface.
+ *
+ * The result used to be a paragraph inside the settings panel, where it was easy
+ * to miss; a modal reports what happened and holds the release notes, so a user
+ * can read what an update changes before installing it.
+ *
+ * It is modal, so it owns the keyboard while it is open: `resolveEscape` closes
+ * it before the panels, and the global shortcut listener drops every key but
+ * Escape.
+ */
+function UpdateDialog({
+  strings,
+  status,
+  currentVersion,
+  available,
+  blockedPreview,
+  progress,
+  error,
+  busy,
+  onClose,
+  onInstall,
+  onEnablePreview,
+}: {
+  strings: Copy;
+  status: UpdateStatus;
+  currentVersion: string;
+  available: Update | null;
+  blockedPreview: string | null;
+  progress: number | null;
+  error: string;
+  busy: boolean;
+  onClose: () => void;
+  onInstall: () => void;
+  onEnablePreview: () => void;
+}) {
+  const card = useRef<HTMLDivElement>(null);
+
+  // Focus moves into the dialog on open, and back to whatever opened it.
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    card.current?.focus();
+    return () => {
+      if (previous?.isConnected) previous.focus();
+    };
+  }, []);
+
+  /** Keeps Tab inside: what sits behind a modal must not be tabbable. */
+  const trapFocus = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "Tab") return;
+    const focusable = Array.from(
+      card.current?.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+      ) ?? [],
+    );
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+
+  const progressText = progress === null
+    ? strings.installing
+    : `${strings.installing} ${Math.round(progress * 100)}%`;
+
+  return (
+    <div className="update-dialog-layer">
+      <button className="dialog-backdrop" aria-label={strings.closeDialog} onClick={onClose} />
+      <div
+        className="update-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="update-dialog-title"
+        tabIndex={-1}
+        ref={card}
+        onKeyDown={trapFocus}
+      >
+        <header className="dialog-header">
+          <h2 id="update-dialog-title">{strings.updateDetails}</h2>
+          <button className="icon-button subtle danger-strong" onClick={onClose} aria-label={strings.closeDialog}><X size={17} /></button>
+        </header>
+
+        {status === "checking" && <p className="dialog-lead">{strings.checking}</p>}
+        {status === "error" && <p className="dialog-lead error">{strings.updateFailed}{error}</p>}
+        {status === "current" && (
+          <p className="dialog-lead">{strings.upToDate} · {strings.currentVersion} v{currentVersion}</p>
+        )}
+        {status === "installing" && available && <p className="dialog-lead">{progressText}</p>}
+        {status === "installed" && <p className="dialog-lead">{strings.restartToApply}</p>}
+
+        {status === "preview" && blockedPreview && (
+          <>
+            <p className="dialog-version">v{blockedPreview} <span>· {strings.previewTag}</span></p>
+            <p className="dialog-lead">{strings.previewWithheld}</p>
+          </>
+        )}
+
+        {available && (
+          <>
+            <p className="dialog-version">v{available.version} <span>· {strings.updateAvailable}</span></p>
+            <ScrollArea className="dialog-changelog">
+              <Changelog body={available.body ?? ""} />
+            </ScrollArea>
+          </>
+        )}
+
+        <footer className="dialog-actions">
+          {status === "preview" && (
+            <button className="update-button" onClick={onEnablePreview} disabled={busy}>
+              <Download size={14} />
+              {strings.enablePreview}
+            </button>
+          )}
+          {available && status !== "installed" && (
+            <button className="update-button" onClick={onInstall} disabled={busy}>
+              <Download size={14} />
+              {status === "installing" ? strings.installing : strings.installUpdate}
+            </button>
+          )}
+          <button className="ghost-button" onClick={onClose}>{strings.close}</button>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
+/**
  * The release notes of the pending update.
  *
  * Blocks become elements, never markup: the text arrives over the network, so
  * a commit message containing a tag must stay text.
- */
-function Changelog({ body }: { body: string }) {
+ */function Changelog({ body }: { body: string }) {
   return (
     <div className="changelog">
       {parseMarkdown(body).map((block, index) => {

@@ -39,6 +39,7 @@ export const STORAGE_KEYS = {
   playlist: "mirror-playlist",
   activeId: "mirror-active",
   autoUpdate: "mirror-auto-update",
+  previewUpdates: "mirror-preview-updates",
   autoClearHistory: "mirror-auto-clear-history",
   history: "mirror-history",
 } as const;
@@ -353,18 +354,23 @@ export function resolveShortcut(
 
 export type EscapeOutcome =
   | { handled: true; close: Exclude<Panel, null> }
+  | { handled: true; closeDialog: true }
   | { handled: true; exitFullscreen: true }
   | { handled: false };
 
 /**
- * Escape precedence: settings panel, then playlist panel, then fullscreen.
+ * Escape precedence: update dialog, settings panel, playlist panel, fullscreen.
+ *
+ * The dialog is a modal on top of everything, so it takes Escape first; without
+ * that, Escape would close a panel behind it and leave the dialog up.
  *
  * The settings-before-playlist ordering is stated by the product spec. Mirror
  * renders both panels into a single slot, so at most one is ever open; the
  * ordering is therefore equivalent in practice and kept for clarity and in case
  * the panels ever become independent.
  */
-export function resolveEscape(panel: Panel, isFullscreen: boolean): EscapeOutcome {
+export function resolveEscape(panel: Panel, isFullscreen: boolean, dialogOpen: boolean): EscapeOutcome {
+  if (dialogOpen) return { handled: true, closeDialog: true };
   if (panel === "settings") return { handled: true, close: "settings" };
   if (panel === "playlist") return { handled: true, close: "playlist" };
   if (isFullscreen) return { handled: true, exitFullscreen: true };
@@ -479,6 +485,30 @@ export const PROJECT = {
 
 /** Shown when the native version lookup is unavailable (browser preview). */
 export const FALLBACK_VERSION = "0.1.0";
+
+/**
+ * Whether a release is a preview build (alpha, beta, rc).
+ *
+ * Preview builds are opt-in, so this looks at the version SemVer itself, not at
+ * any release flag on the hosting side: `0.1.0-alpha.2` is a preview wherever it
+ * was published from, and the trailing `+build` metadata never makes one.
+ */
+export function isPreviewVersion(version: string): boolean {
+  const withoutBuild = version.trim().replace(/^v/, "").split("+")[0];
+  const dash = withoutBuild.indexOf("-");
+  return dash >= 0 && withoutBuild.slice(dash + 1).length > 0;
+}
+
+/**
+ * Whether an offered release may be installed.
+ *
+ * Preview builds are opt-in, so a user on a stable version is never moved onto
+ * an alpha by the updater. The dialog reports a withheld preview instead of
+ * hiding it, so the choice stays visible rather than looking like "up to date".
+ */
+export function acceptsUpdate(remoteVersion: string, allowPreview: boolean): boolean {
+  return allowPreview || !isPreviewVersion(remoteVersion);
+}
 
 /** Max chrome opacity timer while playing. */
 export const CHROME_HIDE_DELAY_MS = 2800;

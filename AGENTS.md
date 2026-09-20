@@ -155,10 +155,13 @@ Note the modifier split: on macOS track/speed use **cmd**, on Windows/Linux they
 use **alt**. Panel shortcuts use **cmd**/**ctrl**. This is implemented in
 `resolveShortcut` and covered by tests — do not "simplify" it to one modifier.
 
-`Esc` precedence: settings panel → playlist panel → exit fullscreen.
+`Esc` precedence: update dialog → settings panel → playlist panel → exit
+fullscreen.
 
 Shortcuts must never fire while a text input, textarea, or select has focus
-(`isTypingTarget`), with `Esc` as the only exception.
+(`isTypingTarget`), with `Esc` as the only exception. A modal owns the keyboard:
+while the update dialog is open every key but `Esc` is dropped, so `Space` cannot
+toggle playback behind it.
 
 The settings panel lists **only the bindings for the platform it is running on**
 (`shortcutKeys` + `SHORTCUT_ORDER`), so the keys shown always match the keys that
@@ -216,8 +219,28 @@ history row, or moving to another track still plays that item. `resolveAutoplay`
 
 **Settings panel**: sections are 外观 / 播放 / 更新 / 快捷键 / 关于. Section icons are
 plain glyphs with no badge behind them. The update check button sits on the
-section title row (via the `action` slot of `SettingSection`), the auto-check
-preference in the body. Playback speed, theme, and language are dropdowns.
+section title row (via the `action` slot of `SettingSection`); the auto-check
+preference, the preview-build preference and a 查看详情 button in the body.
+Playback speed, theme, and language are dropdowns. The release notes are not
+rendered here — they belong to the update dialog, below.
+
+**Update dialog**: the result of a check is a modal, not a paragraph in the
+panel. A check the user asked for always reports — up to date, a withheld
+preview, or an error — while the check on launch opens the dialog only when
+there is an update the user can act on, so it never nags. The release notes are
+the point of it, rendered from `lib/markdown.ts` blocks like everywhere else. It
+is modal: `resolveEscape` closes it before the panels, the global shortcut
+listener drops every key but `Esc`, `Tab` is trapped inside, and focus returns to
+whatever opened it. It holds no state of its own — `App.tsx` owns the update
+state and passes it in.
+
+**Preview builds are opt-in**: `acceptsUpdate` (`lib/player.ts`) withholds any
+release whose version carries a SemVer prerelease part (`0.1.0-alpha.2`) unless
+接收预览版更新 is on, so the updater never moves a stable install onto an alpha.
+A withheld preview is *reported* rather than hidden: the dialog names the version
+and offers to turn the preference on and re-check, because otherwise it looks
+identical to being up to date. This reads the version string, not GitHub's
+prerelease flag — see the release section for that one.
 
 **Combobox** (`Combobox` in `App.tsx`): a listbox-style dropdown used for the
 speed, theme, and language choices. Three rules matter:

@@ -14,6 +14,7 @@ import {
   SPEED_STEPS,
   STORAGE_KEYS,
   WINDOW_FIT,
+  acceptsUpdate,
   clamp,
   detectPlatform,
   extensionOf,
@@ -25,6 +26,7 @@ import {
   getInitialNumber,
   getInitialPlaybackMode,
   getInitialTheme,
+  isPreviewVersion,
   isSupportedVideo,
   isTypingTarget,
   nextIndex,
@@ -468,27 +470,74 @@ describe("resolveShortcut shared keys", () => {
 });
 
 describe("resolveEscape precedence", () => {
+  it("closes the update dialog before anything behind it", () => {
+    expect(resolveEscape("settings", true, true)).toEqual({ handled: true, closeDialog: true });
+    expect(resolveEscape("playlist", true, true)).toEqual({ handled: true, closeDialog: true });
+    // Nothing else open: the dialog still wins, so fullscreen stays.
+    expect(resolveEscape(null, true, true)).toEqual({ handled: true, closeDialog: true });
+  });
+
   it("closes the settings panel first", () => {
-    expect(resolveEscape("settings", true)).toEqual({ handled: true, close: "settings" });
+    expect(resolveEscape("settings", true, false)).toEqual({ handled: true, close: "settings" });
   });
 
   it("closes the playlist next", () => {
-    expect(resolveEscape("playlist", true)).toEqual({ handled: true, close: "playlist" });
+    expect(resolveEscape("playlist", true, false)).toEqual({ handled: true, close: "playlist" });
   });
 
   it("only exits fullscreen when no panel is open", () => {
-    expect(resolveEscape(null, true)).toEqual({ handled: true, exitFullscreen: true });
+    expect(resolveEscape(null, true, false)).toEqual({ handled: true, exitFullscreen: true });
   });
 
   it("does nothing when nothing is open", () => {
-    expect(resolveEscape(null, false)).toEqual({ handled: false });
+    expect(resolveEscape(null, false, false)).toEqual({ handled: false });
   });
 
   // Both panels share one slot, so settings and playlist cannot be open at the
   // same time; the ordering in the spec is not independently observable here.
   it("prefers closing a panel over leaving fullscreen", () => {
-    const settings = resolveEscape("settings", true);
+    const settings = resolveEscape("settings", true, false);
     expect("close" in settings && settings.close).toBe("settings");
+  });
+});
+
+describe("preview builds are opt-in", () => {
+  it("recognises a SemVer prerelease", () => {
+    expect(isPreviewVersion("0.1.0-alpha.2")).toBe(true);
+    expect(isPreviewVersion("1.2.3-beta")).toBe(true);
+    expect(isPreviewVersion("2.0.0-rc.1")).toBe(true);
+    expect(isPreviewVersion("v0.1.0-alpha.2")).toBe(true);
+  });
+
+  it("treats a plain release as stable", () => {
+    expect(isPreviewVersion("0.1.0")).toBe(false);
+    expect(isPreviewVersion("1.2.3")).toBe(false);
+    expect(isPreviewVersion("v1.2.3")).toBe(false);
+  });
+
+  it("ignores build metadata", () => {
+    expect(isPreviewVersion("1.2.3+build.7")).toBe(false);
+    expect(isPreviewVersion("1.2.3-rc.1+build.7")).toBe(true);
+  });
+
+  it("does not mistake junk for a preview", () => {
+    expect(isPreviewVersion("")).toBe(false);
+    expect(isPreviewVersion("1.2.3-")).toBe(false);
+  });
+
+  it("withholds a preview until it is opted into", () => {
+    expect(acceptsUpdate("0.1.0-alpha.2", false)).toBe(false);
+    expect(acceptsUpdate("0.1.0-alpha.2", true)).toBe(true);
+  });
+
+  it("always offers a stable release", () => {
+    expect(acceptsUpdate("0.1.0", false)).toBe(true);
+    expect(acceptsUpdate("2.0.0", false)).toBe(true);
+  });
+
+  it("defaults to off, so a stable install is never moved onto a preview", () => {
+    expect(getInitialBoolean(fakeStore(), STORAGE_KEYS.previewUpdates, false)).toBe(false);
+    expect(getInitialBoolean(fakeStore({ [STORAGE_KEYS.previewUpdates]: "true" }), STORAGE_KEYS.previewUpdates, false)).toBe(true);
   });
 });
 
