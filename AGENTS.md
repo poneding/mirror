@@ -87,6 +87,16 @@ The Makefile targets the actual development environment, verified:
   `eslint-disable`.
 
 **Rust**
+- The Windows subsystem flag
+  (`#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]`) belongs in
+  `src-tauri/src/main.rs`. `windows_subsystem` only reaches the linker for the
+  crate being linked, and `mirror_lib` is compiled to an rlib/staticlib/cdylib
+  with no link step for the executable, so the same attribute in `lib.rs` is
+  inert: the released `mirror.exe` links as a console app and Windows opens a
+  terminal window next to the player. That shipped in v0.1.0-alpha.1. Check it
+  on the built artifact, not on the source — read the PE header's subsystem
+  field (2 = GUI, 3 = console); `cargo test` runs in debug, so it proves
+  nothing here.
 - `clippy` runs with `-D warnings`; warnings fail the build.
 - Validate inputs at the command boundary and return `Result<_, String>` for
   anything the frontend can invoke.

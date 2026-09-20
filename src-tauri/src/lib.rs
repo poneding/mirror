@@ -1,5 +1,3 @@
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-
 use tauri::{LogicalSize, Manager, Size, Window};
 
 const MIN_WIDTH: f64 = 640.0;
