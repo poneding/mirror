@@ -1365,7 +1365,7 @@ function App() {
                                   onMouseLeave={hideTip}
                                   aria-describedby={tip?.id === `item-${item.id}` ? tipId : undefined}
                                 >{item.name}</strong>
-                                <small><span>{mediaKind(item) === "audio" ? strings.audio : strings.video}</span><span className="num">{item.duration > 0 ? formatTime(item.duration) : "--:--"}</span></small>
+                                <small><span>{mediaKind(item) === "audio" ? strings.audio : strings.video}</span><span className="num">{item.duration > 0 ? formatTime(item.duration) : ""}</span></small>
                               </span>
                             </button>
                             <button className="item-remove" onClick={() => removeItem(item.id)} {...tipFor(`remove-${item.id}`, strings.removeItem)} aria-label={`${strings.removeItem}: ${item.name}`}><X size={13} /></button>
