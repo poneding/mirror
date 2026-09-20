@@ -858,9 +858,15 @@ function App() {
     { key: "list", label: strings.repeatList, icon: ListVideo },
   ];
 
+  // A panel is a surface the user opened on purpose, so while one is up the
+  // titlebar stays out of the auto-hide cycle: the window has to remain
+  // draggable and closable even when the pointer leaves it. The control bar is
+  // the part that steps aside, which `.panel-open` in the stylesheet does.
+  const chromeShown = chromeVisible || panel !== null;
+
   return (
     <main
-      className={`mirror-shell ${activeItem ? "has-video" : ""} ${chromeVisible ? "chrome-visible" : "chrome-hidden"} ${panel ? "panel-open" : ""}`}
+      className={`mirror-shell ${activeItem ? "has-video" : ""} ${chromeShown ? "chrome-visible" : "chrome-hidden"} ${panel ? "panel-open" : ""}`}
       onMouseMove={showChrome}
       onMouseLeave={() => {
         // The pointer left the window: take the chrome away immediately, and

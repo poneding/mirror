@@ -430,6 +430,13 @@ input:focus-visible {
 /* Keeps the translate: the hide animation has to land on the same centring. */
 .chrome-hidden .player-chrome { opacity: 0; transform: translate(-50%, 12px); pointer-events: none; }
 
+/* An open panel owns the window, and the transport bar sits dead centre in it,
+   competing with the panel for attention (it was never usable there either: the
+   backdrop already covered it). So it goes. The titlebar is deliberately not
+   part of this — the panel keeps its top offset below it, because an open panel
+   never puts the shell into `chrome-hidden` (see `chromeShown` in App.tsx). */
+.panel-open .player-chrome { opacity: 0; transform: translate(-50%, 12px); pointer-events: none; }
+
 .progress-row { display: flex; align-items: center; gap: 8px; }
 .time-label { min-width: 34px; color: var(--muted-foreground); font-size: 10px; font-variant-numeric: tabular-nums; }
 .time-label:last-child { text-align: right; }
@@ -590,7 +597,6 @@ input:focus-visible {
   box-shadow: var(--shadow);
   backdrop-filter: blur(28px) saturate(1.2);
   animation: panel-in .22s ease;
-  transition: top .2s ease;
 }
 
 .side-panel.settings { right: auto; left: 8px; }
@@ -601,8 +607,6 @@ input:focus-visible {
 }
 
 .side-panel.settings { animation-name: panel-in-left; }
-
-.chrome-hidden .side-panel { top: 8px; }
 
 /* ---------- overlay scroll area ---------- */
 

@@ -207,6 +207,14 @@ side groups get — do not replace it with `justify-content: space-between`.
 Seeking lives on the arrow keys and the progress bar, not on dedicated buttons.
 The play/pause button is a circle.
 
+**An open panel takes the window over from the control bar, never from the
+titlebar.** Settings and the playlist hide the transport bar
+(`.panel-open .player-chrome`) — the backdrop already sat over it, so nothing was
+clickable there — while the titlebar stays: `chromeShown` in `App.tsx` keeps the
+shell out of `chrome-hidden` whenever a panel is open. Without that, the pointer
+leaving the window slid the titlebar away and pulled the panel's top offset up
+with it.
+
 **The video picture is not a control.** Clicking it must not toggle playback;
 resuming is the play button, `Space`, or the media keys.
 `cursor: pointer` on `.video-element` would advertise otherwise — keep it
