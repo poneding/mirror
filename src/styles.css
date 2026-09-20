@@ -623,7 +623,16 @@ input:focus-visible {
   cursor: pointer;
 }
 
-/* Right by default (the playlist); settings opens on the left. */
+/* Right by default (the playlist); settings opens on the left.
+
+   The glass sits on a pseudo-element, for the same reason `.player-chrome`'s
+   does: a `backdrop-filter` on the panel makes it the backdrop root for
+   everything inside it, and a dropdown opened inside the panel would then blur
+   the panel itself — an opaque surface — instead of what is behind it. Measured
+   before the fix: text under an open dropdown kept edges up to 172 levels with
+   4.25% of pixels in strong contrast, i.e. plainly readable through it. With
+   the filter one level down, the dropdown samples the picture and the rows
+   underneath, which is the frost every other surface has. */
 .side-panel {
   position: absolute;
   z-index: 20;
@@ -638,10 +647,20 @@ input:focus-visible {
   border: 1px solid var(--glass-border);
   border-radius: 16px;
   color: var(--foreground);
-  background: var(--glass-fill);
-  box-shadow: var(--glass-sheen), var(--shadow);
-  backdrop-filter: var(--glass-blur);
+  background: transparent;
+  box-shadow: var(--shadow);
   animation: panel-in .22s ease;
+}
+
+.side-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--glass-fill);
+  box-shadow: var(--glass-sheen);
+  backdrop-filter: var(--glass-blur);
 }
 
 .side-panel.settings { right: auto; left: 8px; }
