@@ -209,6 +209,11 @@ resuming is the play button, the centre overlay, `Space`, or the media keys.
 `cursor: pointer` on `.video-element` would advertise otherwise — keep it
 `default`.
 
+**Autoplay**: a video restored from storage loads paused — opening Mirror is not
+a request to play, so the user starts it. Adding a file, picking a playlist or
+history row, or moving to another track still plays that item. `resolveAutoplay`
+(`lib/player.ts`) owns this rule.
+
 **Settings panel**: sections are 外观 / 播放 / 更新 / 快捷键 / 关于. Section icons are
 plain glyphs with no badge behind them. The update check button sits on the
 section title row (via the `action` slot of `SettingSection`), the auto-check

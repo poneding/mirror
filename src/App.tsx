@@ -73,6 +73,7 @@ import {
   recordHistory,
   removeHistoryEntry,
   resolveActiveId,
+  resolveAutoplay,
   resolveEndedAction,
   resolveEscape,
   resolveShortcut,
@@ -240,6 +241,13 @@ function App() {
   const historyWriteAt = useRef(0);
   const [items, setItems] = useState<MediaItem[]>(() => parseStoredPlaylist(localStorage.getItem(STORAGE_KEYS.playlist)));
   const [activeId, setActiveId] = useState<string | null>(() => localStorage.getItem(STORAGE_KEYS.activeId));
+  /**
+   * The selection the app opened with. Its first load stays paused — starting
+   * Mirror must not start a restored video on its own — while every later load
+   * (adding, picking, next/previous) plays. Cleared once another item loads, so
+   * returning to this one later behaves like any other selection.
+   */
+  const launchIdRef = useRef<string | null>(resolveActiveId(items, activeId));
   const [panel, setPanel] = useState<Panel>(null);
   const [theme, setTheme] = useState<Theme>(() => getInitialTheme(store));
   const [language, setLanguage] = useState<Language>(() => getInitialLanguage(store));
@@ -416,11 +424,13 @@ function App() {
   useEffect(() => {
     const video = videoRef.current;
     if (!activeSource || !video) return;
+    const decision = resolveAutoplay(launchIdRef.current, activeId);
+    launchIdRef.current = decision.launchId;
     video.src = activeSource;
     video.load();
     setDuration(0);
     setCurrentTime(0);
-    void video.play().catch(() => setIsPlaying(false));
+    if (decision.autoplay) void video.play().catch(() => setIsPlaying(false));
   }, [activeId, activeSource]);
 
   useEffect(() => {

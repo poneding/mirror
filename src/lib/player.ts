@@ -151,6 +151,22 @@ export function resolveActiveId(items: MediaItem[], activeId: string | null): st
   return items[0].id;
 }
 
+/**
+ * Decides whether a load should start playing.
+ *
+ * The item that was active when the app opened must stay paused: launching
+ * Mirror is not a request to play. Every later load comes from something the
+ * user did — adding a file, picking a row, moving to the next track — so it
+ * plays. The exception is spent once another item loads, which is why the
+ * returned `launchId` is kept for the next call.
+ */
+export type AutoplayDecision = { autoplay: boolean; launchId: string | null };
+
+export function resolveAutoplay(launchId: string | null, activeId: string | null): AutoplayDecision {
+  if (launchId !== null && launchId === activeId) return { autoplay: false, launchId };
+  return { autoplay: true, launchId: null };
+}
+
 /** Wraps around in both directions, so prev at index 0 lands on the last item. */
 export function nextIndex(current: number, length: number, direction: 1 | -1): number {
   if (length <= 0) return 0;
