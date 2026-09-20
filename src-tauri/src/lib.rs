@@ -1,5 +1,13 @@
 use tauri::{LogicalSize, Manager, Size, Window};
 
+#[cfg(target_os = "windows")]
+use std::sync::atomic::{AtomicBool, Ordering};
+
+/// Whether Mirror dropped a maximized window to enter fullscreen, so the way out
+/// knows to put the maximized window back. Mirror has one window.
+#[cfg(target_os = "windows")]
+static UNMAXIMIZED_FOR_FULLSCREEN: AtomicBool = AtomicBool::new(false);
+
 const MIN_WIDTH: f64 = 640.0;
 const MIN_HEIGHT: f64 = 360.0;
 const MAX_WIDTH: f64 = 1920.0;
@@ -63,9 +71,48 @@ fn set_window_pinned(window: Window, pinned: bool) -> Result<(), String> {
 
 #[tauri::command]
 fn set_window_fullscreen(window: Window, fullscreen: bool) -> Result<(), String> {
+    // Win32 ignores `SetWindowPos` geometry while the window carries
+    // `WS_MAXIMIZE`, and tao 0.35 through 0.37 leave that bit set when they
+    // switch a window to borderless fullscreen (tauri-apps/tao#1087; the fix in
+    // #1088 is unmerged). The fullscreen geometry then lands on the restore
+    // rect instead of the window, so entering fullscreen from a maximized
+    // window left Mirror at the work area size with the taskbar still showing
+    // while the transport hid as if the picture had grown. Both halves below
+    // exist for that one cause, and the window is measured around them: the
+    // intermediate states they pass through are not presented (see AGENTS.md).
+    #[cfg(target_os = "windows")]
+    if !fullscreen && UNMAXIMIZED_FOR_FULLSCREEN.swap(false, Ordering::SeqCst) {
+        // Maximize before tao restores its saved placement: that restore puts
+        // the normal rect back first and maximizes on top of it, which is one
+        // visible frame of a small window.
+        window
+            .maximize()
+            .map_err(|error| error.to_string())?;
+    }
+
     window
         .set_fullscreen(fullscreen)
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string())?;
+
+    #[cfg(target_os = "windows")]
+    if fullscreen && window.is_maximized().unwrap_or(false) {
+        // Fullscreen first, so tao saves the maximized placement as the one to
+        // come back to. Dropping the maximize afterwards only needs the
+        // geometry re-applied, which is the one thing tao could not do itself.
+        window
+            .unmaximize()
+            .map_err(|error| error.to_string())?;
+        UNMAXIMIZED_FOR_FULLSCREEN.store(true, Ordering::SeqCst);
+
+        if let Some(monitor) = window.current_monitor().map_err(|error| error.to_string())? {
+            window
+                .set_position(*monitor.position())
+                .and_then(|_| window.set_size(*monitor.size()))
+                .map_err(|error| error.to_string())?;
+        }
+    }
+
+    Ok(())
 }
 
 #[cfg(target_os = "windows")]

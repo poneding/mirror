@@ -221,6 +221,22 @@ macOS keeps minimise + close. The glyph follows the real window state, synced
 through `onResized` so it stays correct when the window is maximised by another
 route (double-click, OS shortcut).
 
+**Fullscreen from a maximized window** needs a Windows-only detour in
+`set_window_fullscreen` (`lib.rs`), and both halves of it are load-bearing. Win32
+ignores `SetWindowPos` geometry while a window carries `WS_MAXIMIZE`, and tao
+0.35 through 0.37 leave that bit set when they switch a window to borderless
+fullscreen (tao#1087; the fix, #1088, is unmerged), so the fullscreen geometry
+landed on the restore rect: the window kept the work-area size, taskbar and all,
+while the transport hid as if the picture had grown. Entering fullscreen
+therefore drops the maximize and re-applies the monitor geometry; leaving it
+maximizes first, because tao restores its own saved placement by putting the
+normal rect back before maximizing, which is one visible frame of a small window
+otherwise. Both intermediate states are real but are never presented: measured
+over CDP with `Page.startScreencast` on the live window, the only frames the
+compositor shows are the maximized and the fullscreen one. A window that was
+never maximized takes the untouched path, and the whole detour can go when tao
+fixes this.
+
 **Control bar layout**: volume on the left, transport (previous / play / next)
 truly centred, playback speed and fullscreen on the right. The centring uses a
 `1fr auto 1fr` grid, so the transport stays centred regardless of how wide the
