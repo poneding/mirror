@@ -982,11 +982,8 @@ input:focus-visible {
   position: absolute;
   z-index: 40;
   min-width: 100%;
-  max-height: 216px;
   margin: 0;
   padding: 4px;
-  overflow: auto;
-  list-style: none;
   border: 1px solid var(--glass-border-strong);
   border-radius: 10px;
   background: var(--glass-fill);
@@ -995,11 +992,12 @@ input:focus-visible {
   animation: combobox-in .14s ease;
 }
 
-.combobox-list::-webkit-scrollbar { width: 10px; background: transparent; border: none; }
-.combobox-list::-webkit-scrollbar-track { background: transparent; border: none; }
-.combobox-list::-webkit-scrollbar-thumb { background-color: transparent; border: 3px solid transparent; border-radius: 999px; background-clip: content-box; }
-.combobox-list:hover::-webkit-scrollbar-thumb { background-color: var(--scroll-thumb); }
-.combobox-list::-webkit-scrollbar-corner { background: transparent; }
+/* The menu scrolls on the same overlay thumb as the playlist, not on a native
+   scrollbar: the webkit scrollbar it used to carry reserved 10px of the
+   control's width, and on a 190px menu that is the difference between a family
+   name fitting and getting ellipsized. 216px is the height the box had as a
+   whole; the scroller takes that minus this box's 8px padding and 2px border. */
+.combobox-list > .scroll-view { height: auto; max-height: 206px; }
 
 .combobox-option {
   display: flex;

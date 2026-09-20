@@ -1743,12 +1743,15 @@ function ScrollArea({
   className = "",
   id,
   role,
+  label,
   labelledBy,
 }: {
   children: ReactNode;
   className?: string;
   id?: string;
   role?: string;
+  /** Names the scroller itself, for roles that carry no visible label. */
+  label?: string;
   labelledBy?: string;
 }) {
   const scrollerRef = useRef<HTMLDivElement>(null);
@@ -1830,6 +1833,7 @@ function ScrollArea({
         ref={scrollerRef}
         id={id}
         role={role}
+        aria-label={label}
         aria-labelledby={labelledBy}
         onScroll={reveal}
         onMouseEnter={reveal}
@@ -1972,9 +1976,9 @@ function Combobox({
         <ChevronDown size={13} aria-hidden="true" />
       </button>
       {open && (
-        <ul className="combobox-list" role="listbox" id={listId} aria-label={label}>
+        <ScrollArea className="combobox-list" id={listId} role="listbox" label={label}>
           {options.map((option, index) => (
-            <li
+            <div
               key={option.value}
               id={`${listId}-${index}`}
               role="option"
@@ -1985,9 +1989,9 @@ function Combobox({
             >
               <span style={option.style}>{option.label}</span>
               {option.value === value && <Check size={12} aria-hidden="true" />}
-            </li>
+            </div>
           ))}
-        </ul>
+        </ScrollArea>
       )}
     </div>
   );

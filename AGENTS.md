@@ -128,7 +128,10 @@ The Makefile targets the actual development environment, verified:
 - Scrollbars are styled through `::-webkit-scrollbar` only. Setting the standard
   `scrollbar-color` / `scrollbar-width` properties makes Chromium ignore those
   pseudo-elements outright and the native track frame comes back. Thumbs are
-  transparent until the scroll container is hovered, so panels stay quiet.
+  transparent until the scroll container is hovered, so panels stay quiet. A
+  native scrollbar reserves its width, which a 190px dropdown cannot spare, so
+  everything that scrolls inside a `ScrollArea` — panels and the dropdown menus —
+  scrolls on that component's overlay thumb instead.
 - Keep frosted surfaces (`backdrop-filter`) on panels and overlays, never on the
   element that covers playing video: blurring the picture both looks muddy and
   costs frames.
