@@ -208,7 +208,7 @@ Seeking lives on the arrow keys and the progress bar, not on dedicated buttons.
 The play/pause button is a circle.
 
 **The video picture is not a control.** Clicking it must not toggle playback;
-resuming is the play button, the centre overlay, `Space`, or the media keys.
+resuming is the play button, `Space`, or the media keys.
 `cursor: pointer` on `.video-element` would advertise otherwise — keep it
 `default`.
 

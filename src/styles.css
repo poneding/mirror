@@ -292,7 +292,7 @@ input:focus-visible {
 /* ---------- buttons ---------- */
 
 .icon-button, .control-button, .play-button,
-.center-play, .playlist-select,
+.playlist-select,
 .mode-list button { border: 0; cursor: pointer; }
 
 /* Reset the UA button padding: with the default `1px 6px` the content box of a
@@ -363,22 +363,6 @@ input:focus-visible {
 
 .drop-overlay strong { font-size: 15px; }
 .drag-over .video-element { opacity: .58; }
-
-.center-play {
-  position: absolute;
-  display: grid;
-  place-items: center;
-  width: 64px;
-  height: 64px;
-  border: 1px solid var(--glass-border-strong);
-  border-radius: 50%;
-  color: var(--primary-foreground);
-  background: var(--primary);
-  box-shadow: 0 10px 40px rgba(0, 0, 0, .4);
-  transition: transform .2s ease, opacity .2s ease;
-}
-
-.center-play:hover { transform: scale(1.05); opacity: .92; }
 
 /* ---------- home ---------- */
 

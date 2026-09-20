@@ -939,9 +939,6 @@ function App() {
             <strong>{strings.add}</strong>
           </div>
         )}
-        {activeItem && !isPlaying && currentTime === 0 && (
-          <button className="center-play" onClick={togglePlay} aria-label={strings.playPause}><Play size={25} fill="currentColor" /></button>
-        )}
       </section>
 
       {activeItem && (
