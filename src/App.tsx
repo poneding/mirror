@@ -123,7 +123,6 @@ const copy = {
     repeatList: "列表循环",
     autoUpdate: "自动检查更新",
     previewUpdates: "接收预览版更新",
-    previewHint: "alpha / beta 等预览版默认不接收",
     clearHistory: "自动清除播放记录",
     checkUpdate: "检查更新",
     checking: "检查中…",
@@ -199,7 +198,6 @@ const copy = {
     repeatList: "Repeat playlist",
     autoUpdate: "Check for updates automatically",
     previewUpdates: "Accept preview builds",
-    previewHint: "alpha / beta builds are off by default",
     clearHistory: "Clear watch history automatically",
     checkUpdate: "Check for updates",
     checking: "Checking…",
@@ -1118,7 +1116,6 @@ function App() {
                 >
                   <ToggleRow label={strings.autoUpdate} checked={autoUpdate} onChange={setAutoUpdate} />
                   <ToggleRow label={strings.previewUpdates} checked={previewUpdates} onChange={setPreviewUpdates} />
-                  <p className="setting-hint">{strings.previewHint}</p>
                   {isTauri() && (updateStatusText !== "" || available !== null || blockedPreview !== null) && (
                     <div className="update-block">
                       {updateStatusText && <p className={`update-status ${updateStatus === "error" ? "error" : ""}`}>{updateStatusText}</p>}
