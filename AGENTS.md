@@ -164,6 +164,7 @@ decision, not an implementation detail.
 | Previous / next | `⌘ ←` `⌘ →` | `Alt ←` `Alt →` |
 | Playback speed | `⌘ ↑` `⌘ ↓` | `Alt ↑` `Alt ↓` |
 | Fullscreen | `Enter` | `Enter` |
+| Open video | `⌘ O` | `Ctrl O` |
 | Settings panel | `⌘ ,` | `Ctrl ,` |
 | Playlist panel | `⌘ P` | `Ctrl P` |
 

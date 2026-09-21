@@ -801,6 +801,9 @@ function App() {
         case "fullscreen":
           void toggleFullscreen();
           return;
+        case "open-video":
+          void addVideos();
+          return;
         case "panel":
           setPanel(shortcut.panel);
           return;
@@ -1267,6 +1270,7 @@ function App() {
     track: strings.nextPrevious,
     speed: strings.speed,
     fullscreen: strings.fullScreen,
+    openVideo: strings.add,
     settings: strings.settings,
     playlist: strings.playlist,
     closePanel: strings.closePanel,

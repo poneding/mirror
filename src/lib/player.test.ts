@@ -445,6 +445,12 @@ describe("platform-specific shortcut list", () => {
     expect(shortcutKeys("playlist", "linux")).toEqual(["Ctrl", "P"]);
   });
 
+  it("uses cmd on macOS and ctrl elsewhere for opening videos", () => {
+    expect(shortcutKeys("openVideo", "mac")).toEqual(["⌘", "O"]);
+    expect(shortcutKeys("openVideo", "windows")).toEqual(["Ctrl", "O"]);
+    expect(shortcutKeys("openVideo", "linux")).toEqual(["Ctrl", "O"]);
+  });
+
   it("renders the same modifier-free keys on every platform", () => {
     for (const platform of ["mac", "windows", "linux"] as const) {
       expect(shortcutKeys("playPause", platform)).toEqual(["Space"]);
@@ -499,6 +505,11 @@ describe("resolveShortcut on macOS", () => {
     expect(resolveShortcut({ key: "p", ctrlKey: true }, mac)).toBeNull();
   });
 
+  it("opens videos on cmd+O, not ctrl+O", () => {
+    expect(resolveShortcut({ key: "o", metaKey: true }, mac)).toEqual({ type: "open-video" });
+    expect(resolveShortcut({ key: "o", ctrlKey: true }, mac)).toBeNull();
+  });
+
   it("ignores alt+arrow, which belongs to Windows/Linux", () => {
     expect(resolveShortcut({ key: "ArrowRight", altKey: true }, mac)).toEqual({ type: "seek", amount: 1 });
   });
@@ -517,6 +528,12 @@ describe("resolveShortcut on Windows/Linux", () => {
       expect(resolveShortcut({ key: ",", ctrlKey: true }, platform)).toEqual({ type: "panel", panel: "settings" });
       expect(resolveShortcut({ key: "p", ctrlKey: true }, platform)).toEqual({ type: "panel", panel: "playlist" });
       expect(resolveShortcut({ key: "p", metaKey: true }, platform)).toBeNull();
+    });
+
+    it(`opens videos on ctrl+O on ${platform}`, () => {
+      expect(resolveShortcut({ key: "o", ctrlKey: true }, platform)).toEqual({ type: "open-video" });
+      expect(resolveShortcut({ key: "O", ctrlKey: true }, platform)).toEqual({ type: "open-video" });
+      expect(resolveShortcut({ key: "o", metaKey: true }, platform)).toBeNull();
     });
   }
 

@@ -300,6 +300,7 @@ export type ShortcutCommand =
   | { type: "track"; direction: 1 | -1 }
   | { type: "speed"; direction: 1 | -1 }
   | { type: "fullscreen" }
+  | { type: "open-video" }
   | { type: "panel"; panel: Exclude<Panel, null> };
 
 /**
@@ -315,6 +316,7 @@ export type ShortcutId =
   | "track"
   | "speed"
   | "fullscreen"
+  | "openVideo"
   | "settings"
   | "playlist"
   | "closePanel";
@@ -326,6 +328,7 @@ export const SHORTCUT_ORDER: ShortcutId[] = [
   "track",
   "speed",
   "fullscreen",
+  "openVideo",
   "settings",
   "playlist",
   "closePanel",
@@ -347,6 +350,8 @@ export function shortcutKeys(id: ShortcutId, platform: Platform): string[] {
       return isMac ? ["⌘", "↑ / ↓"] : ["Alt", "↑ / ↓"];
     case "fullscreen":
       return ["Enter"];
+    case "openVideo":
+      return isMac ? ["⌘", "O"] : ["Ctrl", "O"];
     case "settings":
       return isMac ? ["⌘", ","] : ["Ctrl", ","];
     case "playlist":
@@ -477,6 +482,7 @@ export function resolveShortcut(
   if (event.key === "ArrowUp") return { type: "volume", amount: 1 };
   if (event.key === "ArrowDown") return { type: "volume", amount: -1 };
 
+  if (command && event.key.toLowerCase() === "o") return { type: "open-video" };
   if (command && event.key === ",") return { type: "panel", panel: "settings" };
   if (command && event.key.toLowerCase() === "p") return { type: "panel", panel: "playlist" };
 
