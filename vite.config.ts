@@ -5,7 +5,10 @@ export default defineConfig({
   plugins: [react()],
   clearScreen: false,
   server: {
-    port: 1420,
+    // Tauri's default is 1420 for every project, which collides as soon as a
+    // second Tauri app is debugged at the same time. Keep this in step with
+    // `build.devUrl` in src-tauri/tauri.conf.json.
+    port: 6477,
     strictPort: true,
     host: "0.0.0.0"
   },

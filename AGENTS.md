@@ -487,7 +487,7 @@ port.
 
 Then attach over CDP at `http://127.0.0.1:9222` (Playwright's
 `chromium.connectOverCDP`, or `curl http://127.0.0.1:9222/json` to list pages).
-Under `tauri dev` the page URL is `http://localhost:1420/`; a production build
+Under `tauri dev` the page URL is `http://localhost:6477/`; a production build
 serves `http://tauri.localhost/`. Check the URL either way, so you know you
 reached the native webview and not a browser tab.
 
