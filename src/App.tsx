@@ -1330,7 +1330,7 @@ function App() {
       >
         <div className="titlebar-actions no-drag">
           <button className={`icon-button subtle ${isPinned ? "active" : ""}`} onClick={() => void togglePinned()} {...tipFor("pin", isPinned ? strings.pinned : strings.pinWindow)} aria-label={isPinned ? strings.pinned : strings.pinWindow}>
-            {isPinned ? <Pin size={16} /> : <PinOff size={16} />}
+            {isPinned ? <Pin size={16} fill="currentColor" /> : <PinOff size={16} />}
           </button>
           <button className="icon-button subtle" onClick={() => setPanel("settings")} {...tipFor("settings", strings.settings)} aria-label={strings.settings}>
             <Settings2 size={17} />
