@@ -44,6 +44,7 @@ import {
   nextIndex,
   parseHistory,
   parseStoredPlaylist,
+  pictureOffset,
   recordHistory,
   removeHistoryEntry,
   resolveActiveId,
@@ -898,6 +899,79 @@ describe("fitWindowToVideo", () => {
     expect(fitWindowToVideo(-1920, 1080)).toBeNull();
     expect(fitWindowToVideo(Number.NaN, 1080)).toBeNull();
     expect(fitWindowToVideo(1920, Number.POSITIVE_INFINITY)).toBeNull();
+  });
+});
+
+describe("pictureOffset", () => {
+  it("lands the letterbox offset on a whole CSS pixel", () => {
+    // 1120x631.43 stage — the page's viewport for a 630.29 CSS px client on a
+    // 175% display — with a 16:9 video: the picture is 630 CSS px tall, so
+    // centring it puts the offset at 0.71 px, the fraction the two compositing
+    // passes disagreed about, one device pixel apart, whenever a frosted bar
+    // above the picture appeared.
+    const page = pictureOffset(1120, 631.43, 1920, 1080)!;
+    expect(page.x).toBe(0);
+    expect(page.y).toBe(1);
+    expect(Number.isInteger(page.y)).toBe(true);
+    // Snapping may only ever move the picture by half a CSS pixel.
+    expect(Math.abs(page.y - (631.43 - 630) / 2)).toBeLessThanOrEqual(0.5 + 1e-9);
+
+    // The client area is the smaller figure the stage is actually sized to:
+    // there the surplus is under half a pixel, so the picture sits flush at the
+    // top instead of leaving the gap the page-sized stage produced.
+    const client = pictureOffset(1120, 630.286, 1920, 1080)!;
+    expect(client.x).toBe(0);
+    expect(client.y).toBe(0);
+  });
+
+  it("keeps every offset on a whole CSS pixel, within half a pixel of centred", () => {
+    const shapes: [number, number][] = [
+      [1920, 1080],
+      [720, 1280],
+      [2560, 1080],
+      [1080, 1920],
+      [640, 640],
+    ];
+    const stages: [number, number][] = [
+      [1120, 631.43],
+      [640, 360],
+      [1960, 1103],
+      [800, 1200],
+      [1120.5, 630.25],
+    ];
+    for (const [width, height] of shapes) {
+      for (const [stageWidth, stageHeight] of stages) {
+        const offset = pictureOffset(stageWidth, stageHeight, width, height)!;
+        const scale = Math.min(stageWidth / width, stageHeight / height);
+        const centredX = (stageWidth - width * scale) / 2;
+        const centredY = (stageHeight - height * scale) / 2;
+
+        expect(Number.isInteger(offset.x)).toBe(true);
+        expect(Number.isInteger(offset.y)).toBe(true);
+        expect(Math.abs(offset.x - centredX)).toBeLessThanOrEqual(0.5 + 1e-9);
+        expect(Math.abs(offset.y - centredY)).toBeLessThanOrEqual(0.5 + 1e-9);
+        // `contain` never lets the picture leave the stage, so snapping the
+        // offsets must not push one of them below zero either.
+        expect(offset.x).toBeGreaterThanOrEqual(0);
+        expect(offset.y).toBeGreaterThanOrEqual(0);
+      }
+    }
+  });
+
+  it("leaves an offset that is already whole alone", () => {
+    // A stage the video fills exactly has nothing to snap.
+    expect(pictureOffset(640, 360, 1920, 1080)!.x).toBe(0);
+    expect(pictureOffset(640, 360, 1920, 1080)!.y).toBe(0);
+    expect(pictureOffset(1120, 630, 1920, 1080)!.y).toBe(0);
+  });
+
+  it("rejects unusable input", () => {
+    expect(pictureOffset(0, 600, 1920, 1080)).toBeNull();
+    expect(pictureOffset(1000, 0, 1920, 1080)).toBeNull();
+    expect(pictureOffset(1000, 600, 0, 1080)).toBeNull();
+    expect(pictureOffset(1000, 600, 1920, -1080)).toBeNull();
+    expect(pictureOffset(Number.NaN, 600, 1920, 1080)).toBeNull();
+    expect(pictureOffset(1000, 600, 1920, Number.POSITIVE_INFINITY)).toBeNull();
   });
 });
 

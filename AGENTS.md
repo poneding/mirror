@@ -218,6 +218,26 @@ disappears, so this cannot regress silently. Padding the `resize_to_video`
 command with chrome insets would **not** help: it offsets the space needed, it
 does not stop the crop.
 
+**The picture is fitted inside the window's client area, on whole CSS pixels.**
+WebView2 rounds the page's viewport up to whole CSS pixels, so the page is about
+a CSS pixel taller than the window's client area: a window fitted to a video at
+175% shows 630.29 CSS px of client while the page lays out 631.43. Fitting and
+centring inside the page therefore puts the surplus *above* the picture — a
+visible gap at the top, measured as 2 device pixels of letterbox under the live
+window — and pushes the picture's bottom edge past the window's. `App.tsx`
+measures the client area (`innerSize()/scaleFactor()` on the native side,
+`window.innerWidth/innerHeight` in the browser preview) and sizes `.stage` to
+it, and `pictureOffset` (`lib/player.ts`) rounds the letterbox offsets to whole
+CSS pixels. That rounding is load-bearing beyond looks: a *playing* video is
+drawn by a different compositing pass depending on whether a frosted bar above
+it needs the picture as a backdrop, and the two disagree about a fractional
+offset — measured on a 175% display, the picture sat one device pixel lower
+whenever the titlebar appeared and came back up when it left, while a paused
+video did not move at all. Snapping to a whole *device* pixel does **not** work:
+0.57 CSS px is still fractional in CSS terms. The picture moves by at most half
+a CSS pixel, which is invisible, and the rounding never pushes it past the
+client's edge.
+
 **Window controls**: the window is undecorated (`decorations: false`), so the
 minimise/maximise/close buttons are ours to draw. Windows/Linux get all three;
 macOS keeps minimise + close. The glyph follows the real window state, synced

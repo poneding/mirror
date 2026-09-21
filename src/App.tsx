@@ -82,6 +82,8 @@ import {
   nextIndex,
   parseHistory,
   parseStoredPlaylist,
+  pictureOffset,
+  type PictureOffset,
   recordHistory,
   removeHistoryEntry,
   resolveActiveId,
@@ -366,6 +368,18 @@ function App() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  /** Where the picture sits inside the stage, snapped to whole CSS pixels. */
+  const [picture, setPicture] = useState<PictureOffset | null>(null);
+  /**
+   * The window's client area in CSS pixels — what the window actually shows.
+   *
+   * The page's viewport is *not* that: WebView2 rounds it up to whole CSS
+   * pixels, so a 630.29 CSS px client reports 631.43 and the page is about a
+   * CSS pixel taller than the window. Sizing the stage to the client keeps the
+   * picture fitted and centred inside the visible area instead of inside the
+   * page, which otherwise leaves a gap above the picture and crops its bottom.
+   */
+  const [clientSize, setClientSize] = useState<{ width: number; height: number } | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [chromeVisible, setChromeVisible] = useState(true);
   const [toast, setToast] = useState("");
@@ -636,6 +650,70 @@ function App() {
   useEffect(() => {
     if (videoRef.current) videoRef.current.volume = volume;
   }, [volume, activeId]);
+
+  useEffect(() => {
+    if (!isTauri()) {
+      const measure = () => setClientSize({ width: window.innerWidth, height: window.innerHeight });
+      measure();
+      window.addEventListener("resize", measure);
+      return () => window.removeEventListener("resize", measure);
+    }
+    const appWindow = getCurrentWindow();
+    let unlisten: (() => void) | undefined;
+    const measure = () => {
+      void Promise.all([appWindow.innerSize(), appWindow.scaleFactor()])
+        .then(([size, scale]) => {
+          if (!scale) return;
+          const width = size.width / scale;
+          const height = size.height / scale;
+          setClientSize((current) =>
+            current && current.width === width && current.height === height ? current : { width, height },
+          );
+        })
+        .catch(() => undefined);
+    };
+    measure();
+    void appWindow
+      .onResized(measure)
+      .then((dispose) => {
+        unlisten = dispose;
+      })
+      .catch(() => undefined);
+    return () => unlisten?.();
+  }, []);
+
+  /**
+   * Keeps the picture on whole CSS pixels. The letterbox offset has to be
+   * snapped so both compositing passes Chromium can use for a playing video
+   * draw it in the same place — `pictureOffset` owns the arithmetic and the
+   * measurements behind it. Recomputed when the video reports its size and
+   * whenever the window changes size.
+   */
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !activeItem) {
+      setPicture(null);
+      return;
+    }
+    const update = () => {
+      const next = pictureOffset(
+        clientSize?.width ?? window.innerWidth,
+        clientSize?.height ?? window.innerHeight,
+        video.videoWidth,
+        video.videoHeight,
+      );
+      setPicture((current) =>
+        current && next && current.x === next.x && current.y === next.y ? current : next,
+      );
+    };
+    update();
+    video.addEventListener("loadedmetadata", update);
+    window.addEventListener("resize", update);
+    return () => {
+      video.removeEventListener("loadedmetadata", update);
+      window.removeEventListener("resize", update);
+    };
+  }, [activeId, activeItem, clientSize]);
 
   useEffect(() => {
     const handleFullscreen = () => {
@@ -1280,12 +1358,16 @@ function App() {
         </div>
       </header>
 
-      <section className={`stage ${isDragOver ? "drag-over" : ""}`}>
+      <section
+        className={`stage ${isDragOver ? "drag-over" : ""}`}
+        style={clientSize ? { width: clientSize.width, height: clientSize.height } : undefined}
+      >
         {activeItem ? (
           <video
             ref={videoRef}
             className="video-element"
             playsInline
+            style={picture ? { objectPosition: `${picture.x}px ${picture.y}px` } : undefined}
             onPlay={() => setIsPlaying(true)}
             onPause={() => setIsPlaying(false)}
             onTimeUpdate={handleTimeUpdate}

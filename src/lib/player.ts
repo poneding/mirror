@@ -753,3 +753,43 @@ export function fitWindowToVideo(videoWidth: number, videoHeight: number): Windo
 
   return { width, height };
 }
+
+export type PictureOffset = { x: number; y: number };
+
+/**
+ * Where `object-fit: contain` puts the picture inside the stage, with the
+ * letterbox offsets landed on whole CSS pixels.
+ *
+ * The caller passes the window's *client* area, not the page's viewport: the
+ * viewport is rounded up to whole CSS pixels, so a 630.29 CSS px client reports
+ * 631.43 and the page is about a CSS pixel taller than the window. Fitting and
+ * centring inside the page put that surplus above the picture — a visible gap
+ * at the top — and pushed the picture's bottom past the window's, so the stage
+ * is sized to the client (see `clientSize` in `App.tsx`).
+ *
+ * Centring also leaves the offset in the middle of a pixel, and two compositing
+ * passes Chromium can use for a *playing* video disagree about the fraction:
+ * the ordinary pass draws it sub-pixel, while the pass that renders the picture
+ * as the backdrop of a frosted bar above it snaps it up to a whole CSS pixel.
+ * Measured on a 175% display: a playing video sat one device pixel lower
+ * whenever the titlebar appeared, and came back up when it left; pinning the
+ * offset to a whole CSS pixel removed it (pinning it to a whole *device* pixel
+ * did not — 0.57 px is still fractional in CSS terms). Rounding moves the
+ * picture at most half a CSS pixel, which is invisible, and never pushes it
+ * past the client's edge.
+ */
+export function pictureOffset(
+  stageWidth: number,
+  stageHeight: number,
+  videoWidth: number,
+  videoHeight: number,
+): PictureOffset | null {
+  if (![stageWidth, stageHeight, videoWidth, videoHeight].every(Number.isFinite)) return null;
+  if (stageWidth <= 0 || stageHeight <= 0 || videoWidth <= 0 || videoHeight <= 0) return null;
+
+  const scale = Math.min(stageWidth / videoWidth, stageHeight / videoHeight);
+  const width = videoWidth * scale;
+  const height = videoHeight * scale;
+
+  return { x: Math.round((stageWidth - width) / 2), y: Math.round((stageHeight - height) / 2) };
+}
