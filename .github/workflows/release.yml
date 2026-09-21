@@ -1,10 +1,11 @@
-# Publishing pipeline. A published GitHub release is the only trigger — pushes
-# to main never publish anything.
+# Publishing pipeline. Pushing a version tag is the release — the workflow
+# creates the GitHub release as well, so there is nothing to click; pushes to
+# main never publish anything.
 #
-#   changelog  turns the release tag into the app version and writes the
-#              git-cliff changelog into the release body. That body is also the
-#              `notes` field the updater serves to installed apps, so the
-#              in-app update notice shows the same text.
+#   changelog  turns the release tag into the app version, creates the release
+#              and writes the git-cliff changelog into its body. That body is
+#              also the `notes` field the updater serves to installed apps, so
+#              the in-app update notice shows the same text.
 #   build      builds, signs and attaches the desktop bundles for every
 #              platform, plus latest.json for the updater.
 #
@@ -14,6 +15,12 @@
 name: Release
 
 on:
+  push:
+    tags: ['v*']
+  # Kept for releases published by hand — that is how a tag pushed before this
+  # trigger existed still gets released, and how a failed run is redone. The
+  # release this workflow creates itself is made with the repository token, and
+  # token-made events do not start workflows, so the paths cannot double up.
   release:
     types: [published]
 
@@ -28,7 +35,7 @@ jobs:
       version: ${{ steps.tag.outputs.version }}
       changelog: ${{ steps.cliff.outputs.content }}
     steps:
-      - name: Checkout the release tag
+      - name: Checkout the tag
         uses: actions/checkout@v7
         with:
           # git-cliff walks the tagged history, so it wants every commit and tag.
@@ -37,10 +44,10 @@ jobs:
       - name: Check the tag is SemVer
         id: tag
         env:
-          TAG: ${{ github.event.release.tag_name }}
+          TAG: ${{ github.event.release.tag_name || github.ref_name }}
         run: |
           if [[ ! "$TAG" =~ ^v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
-            echo "::error::Release tag '$TAG' is not SemVer. Publish releases as v1.2.3, or v1.2.3-rc.1 for a prerelease."
+            echo "::error::Tag '$TAG' is not SemVer. Push version tags as v1.2.3, or v1.2.3-rc.1 for a prerelease."
             exit 1
           fi
           echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
@@ -58,11 +65,31 @@ jobs:
         env:
           OUTPUT: CHANGELOG.md
 
-      - name: Write the changelog into the release body
+      - name: Create or update the release with the changelog
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.event.release.tag_name }}
-        run: gh release edit "$TAG" --notes-file CHANGELOG.md
+          TAG: ${{ github.event.release.tag_name || github.ref_name }}
+        run: |
+          # GitHub's *prerelease* flag hides a release from /releases/latest, the
+          # URL the updater reads, so while no stable release exists to be
+          # "latest" a flagged prerelease breaks every update check. Flag a
+          # SemVer prerelease tag only once a stable tag already has a release.
+          prerelease=false
+          if [[ "$TAG" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+- ]]; then
+            if gh release list --exclude-drafts --limit 100 --json tagName --jq '.[].tagName' \
+              | grep -E '^v?[0-9]+\.[0-9]+\.[0-9]+(\+[0-9A-Za-z.-]+)?$' >/dev/null; then
+              prerelease=true
+            fi
+          fi
+
+          # The tag push creates the release; a release published by hand is
+          # already there, and gets its body (and the flag) rewritten here.
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --notes-file CHANGELOG.md --prerelease="$prerelease"
+          else
+            gh release create "$TAG" --title "Mirror $TAG" --verify-tag \
+              --notes-file CHANGELOG.md --prerelease="$prerelease"
+          fi
 
   build:
     name: Build ${{ matrix.label }}
@@ -87,7 +114,7 @@ jobs:
             args: --bundles nsis
     runs-on: ${{ matrix.platform }}
     steps:
-      - name: Checkout the release tag
+      - name: Checkout the tag
         uses: actions/checkout@v7
 
       - name: Set up Node
@@ -127,10 +154,10 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: ${{ github.event.release.tag_name }}
+          tagName: ${{ github.event.release.tag_name || github.ref_name }}
           # The action rewrites the name and body of an existing release, so it
           # is handed back exactly what the changelog job wrote.
-          releaseName: ${{ github.event.release.name || github.event.release.tag_name }}
+          releaseName: ${{ github.event.release.name || format('Mirror {0}', github.event.release.tag_name || github.ref_name) }}
           releaseBody: ${{ needs.changelog.outputs.changelog }}
           releaseDraft: false
           args: ${{ matrix.args }}

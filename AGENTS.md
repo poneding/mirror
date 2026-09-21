@@ -397,15 +397,19 @@ Deliberate constraints:
 
 ## Release and updates
 
-A GitHub release is the only trigger; pushing to `main` publishes nothing.
+A pushed version tag is the trigger, and the workflow creates the release
+itself, so a release is `git tag v1.2.3 && git push origin v1.2.3`. Publishing a
+release by hand runs the same pipeline for its tag — that is how a tag pushed
+before this trigger existed, or a failed run, still gets released. The tag push
+reads the workflow from the tagged commit, so a tag pointing at an older commit
+needs that manual step; pushes to `main` publish nothing.
 
-1. Tag `v1.2.3` (SemVer; `v1.2.3-rc.1` for a prerelease) and publish a release
-   for that tag.
+1. Tag `v1.2.3` (SemVer; `v1.2.3-rc.1` for a prerelease) and push it.
 2. `.github/workflows/release.yml` rejects non-SemVer tags, stamps the version
    into `package.json`, `package-lock.json`, `src-tauri/tauri.conf.json` and
-   `src-tauri/Cargo.toml`, writes the git-cliff changelog into the release body,
-   then builds and signs every desktop target and uploads the bundles plus
-   `latest.json`.
+   `src-tauri/Cargo.toml`, creates the release, writes the git-cliff changelog
+   into its body, then builds and signs every desktop target and uploads the
+   bundles plus `latest.json`.
 3. That body *is* the changelog the app shows: `latest.json` carries it as
    `notes`, and the update notice renders it through `lib/markdown.ts` as
    elements — release notes are remote text, so they are never injected as HTML.
@@ -428,11 +432,13 @@ or test time:
   returns 404 and the app reports "Could not fetch a valid release JSON from the
   remote" — `tauri-plugin-updater` maps the failed JSON decode to that message.
   A SemVer prerelease *tag* (`v0.1.0-alpha.2`) is fine; it is the GitHub flag
-  that hides the release. Fix one already published with
-  `gh release edit <tag> --prerelease=false`. Once a stable release exists,
-  flagging prereleases again is correct: `/releases/latest` is then the stable
-  and a prerelease install still upgrades to it, because `0.1.0` is greater than
-  `0.1.0-alpha.3` in SemVer.
+  that hides the release. The workflow enforces this itself, on create and on
+  update: a prerelease *tag* is flagged only once a stable tag already has a
+  release, which keeps `/releases/latest` serving a real `latest.json` either
+  way. `gh release edit <tag> --prerelease=false` is the same fix by hand.
+  Once a stable release exists, flagging prereleases is correct:
+  `/releases/latest` is then the stable and a prerelease install still upgrades
+  to it, because `0.1.0` is greater than `0.1.0-alpha.3` in SemVer.
 
 Commit subjects drive the changelog, so keep them Conventional
 (`feat`/`fix`/`perf`/`refactor`/`docs`); `cliff.toml` filters out
