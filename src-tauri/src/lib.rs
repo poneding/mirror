@@ -1,5 +1,7 @@
 use serde::Serialize;
 use std::collections::HashSet;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use tauri::{LogicalSize, Manager, Size, Window};
 
@@ -176,6 +178,115 @@ fn list_system_fonts() -> Result<SystemFonts, String> {
     Ok(SYSTEM_FONTS.get_or_init(enumerate_system_fonts).clone())
 }
 
+/// Video file paths under any of `paths`, in the order a person would list
+/// them.
+///
+/// A directory is walked recursively — its own files first, then each
+/// subdirectory's — and a file is kept when its extension is one of
+/// `extensions`. Only the native side can enumerate a folder, so that is all
+/// this does; the extension list is passed in rather than written down again
+/// here, so the frontend stays its single source of truth.
+///
+/// One unreadable folder must not sink the whole selection, so entries that
+/// cannot be read are skipped. A directory reached through a symlink is not
+/// walked: a link that points back at a parent would otherwise loop forever.
+#[tauri::command]
+fn collect_video_paths(paths: Vec<String>, extensions: Vec<String>) -> Result<Vec<String>, String> {
+    let extensions: HashSet<String> = extensions
+        .iter()
+        .map(|extension| extension.trim_start_matches('.').to_lowercase())
+        .filter(|extension| !extension.is_empty())
+        .collect();
+
+    let mut collected = Vec::new();
+    for path in &paths {
+        collect_video_path(Path::new(path), &extensions, &mut collected);
+    }
+
+    // IPC carries UTF-8, so a name that is not valid UTF-8 is dropped rather
+    // than mangled into one that could never be opened again.
+    Ok(collected
+        .into_iter()
+        .filter_map(|path| path.to_str().map(String::from))
+        .collect())
+}
+
+/// Adds one entry of a selection: a file offers itself, a directory brings its
+/// contents.
+fn collect_video_path(path: &Path, extensions: &HashSet<String>, collected: &mut Vec<PathBuf>) {
+    match fs::metadata(path) {
+        Ok(metadata) if metadata.is_dir() => collect_directory(path, extensions, collected),
+        // A file the caller picked is allowed through without an extension — the
+        // media element decides what it can decode — but a file the walk finds
+        // must carry a listed one.
+        Ok(_) if extension_of(path).map_or(true, |ext| extensions.contains(&ext)) => {
+            collected.push(path.to_path_buf())
+        }
+        _ => {}
+    }
+}
+
+/// Walks one directory: its video files in name order, then each of its
+/// subdirectories the same way.
+fn collect_directory(dir: &Path, extensions: &HashSet<String>, collected: &mut Vec<PathBuf>) {
+    let entries = match fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(_) => return,
+    };
+
+    let mut files = Vec::new();
+    let mut directories = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let is_link = entry
+            .file_type()
+            .map(|kind| kind.is_symlink())
+            .unwrap_or(false);
+        // A link to a file is a video like any other; a link to a directory is
+        // where the walk could come back around.
+        let Ok(metadata) = fs::metadata(&path) else {
+            continue;
+        };
+        if metadata.is_dir() {
+            if !is_link {
+                directories.push(path);
+            }
+        } else if is_video_path(&path, extensions) {
+            files.push(path);
+        }
+    }
+
+    sort_by_name(&mut files);
+    sort_by_name(&mut directories);
+    collected.append(&mut files);
+    for directory in directories {
+        collect_directory(&directory, extensions, collected);
+    }
+}
+
+/// Sorts like a person scans a list: by file name, ignoring case.
+fn sort_by_name(paths: &mut [PathBuf]) {
+    paths.sort_by_cached_key(|path| {
+        path.file_name()
+            .map(|name| name.to_string_lossy().to_lowercase())
+            .unwrap_or_default()
+    });
+}
+
+/// Whether a file's extension — case-insensitively, dot or no dot — is one of
+/// the listed ones.
+fn is_video_path(path: &Path, extensions: &HashSet<String>) -> bool {
+    extension_of(path).is_some_and(|extension| extensions.contains(&extension))
+}
+
+/// A file name's extension, lowercased and without its dot. A name that carries
+/// no extension at all — or nothing after the dot — has none.
+fn extension_of(path: &Path) -> Option<String> {
+    let extension = path.extension()?.to_str()?.to_lowercase();
+    let extension = extension.trim_start_matches('.').to_string();
+    (!extension.is_empty()).then_some(extension)
+}
+
 #[cfg(target_os = "windows")]
 fn apply_glass(window: &tauri::WebviewWindow) {
     use window_vibrancy::apply_acrylic;
@@ -211,7 +322,8 @@ pub fn run() {
             resize_to_video,
             set_window_pinned,
             set_window_fullscreen,
-            list_system_fonts
+            list_system_fonts,
+            collect_video_paths
         ])
         .run(tauri::generate_context!())
         .expect("error while running Mirror");
@@ -308,6 +420,136 @@ mod tests {
         let (width, height) = fitted_size(2560.0, 1080.0).unwrap();
         assert!((width / height - 2560.0 / 1080.0).abs() < 0.01);
         assert!((width - 1120.0).abs() < 0.01, "width was {width}");
+    }
+
+    /// A scratch directory tree that removes itself when the test ends.
+    struct TempTree {
+        root: PathBuf,
+    }
+
+    impl TempTree {
+        fn new(name: &str) -> Self {
+            let root =
+                std::env::temp_dir().join(format!("mirror-collect-{name}-{}", std::process::id()));
+            let _ = fs::remove_dir_all(&root);
+            fs::create_dir_all(&root).expect("a scratch directory");
+            Self { root }
+        }
+
+        /// Creates an empty file at a slash-separated path under the root and
+        /// answers with the path the frontend would receive.
+        fn write(&self, relative: &str) -> String {
+            let path = self
+                .root
+                .join(relative.replace('/', std::path::MAIN_SEPARATOR_STR));
+            fs::create_dir_all(path.parent().expect("a parent directory"))
+                .expect("the parent directory");
+            fs::write(&path, b"").expect("a scratch file");
+            path_string(&path)
+        }
+    }
+
+    impl Drop for TempTree {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.root);
+        }
+    }
+
+    fn path_string(path: &Path) -> String {
+        path.to_string_lossy().into_owned()
+    }
+
+    /// The file names of a collected list, which is what the order is about.
+    fn names(paths: &[String]) -> Vec<String> {
+        paths
+            .iter()
+            .map(|path| {
+                Path::new(path)
+                    .file_name()
+                    .map(|name| name.to_string_lossy().into_owned())
+                    .unwrap_or_default()
+            })
+            .collect()
+    }
+
+    /// A folder is walked recursively: its own files in name order, then each
+    /// subdirectory's, and only the listed extensions come back.
+    #[test]
+    fn collect_expands_a_folder_in_name_order() {
+        let tree = TempTree::new("order");
+        tree.write("b.mp4");
+        tree.write("A.mkv");
+        tree.write("notes.txt");
+        tree.write("Season 1/e02.mp4");
+        tree.write("Season 1/e01.mkv");
+        tree.write("Season 1/cover.jpg");
+        tree.write("Season 1/Extras/trailer.mp4");
+        tree.write("Season 2/e03.mp4");
+
+        let collected = collect_video_paths(
+            vec![path_string(&tree.root)],
+            vec!["mp4".into(), "mkv".into()],
+        )
+        .expect("a path list");
+
+        assert_eq!(
+            names(&collected),
+            [
+                "A.mkv",
+                "b.mp4",
+                "e01.mkv",
+                "e02.mp4",
+                "trailer.mp4",
+                "e03.mp4"
+            ]
+        );
+    }
+
+    /// A flat selection keeps the video files and drops anything else,
+    /// including a path that is no longer there.
+    #[test]
+    fn collect_keeps_files_and_skips_the_rest() {
+        let tree = TempTree::new("files");
+        let video = tree.write("clip.MP4");
+        let notes = tree.write("notes.txt");
+        let missing = path_string(&tree.root.join("gone.mp4"));
+
+        let collected =
+            collect_video_paths(vec![video.clone(), notes, missing], vec![".mp4".into()])
+                .expect("a path list");
+
+        assert_eq!(collected, [video]);
+    }
+
+    /// A file the caller picked without an extension is kept, while the walk
+    /// only takes files whose extension is listed.
+    #[test]
+    fn collect_lets_a_picked_file_through_without_an_extension() {
+        let tree = TempTree::new("extensionless");
+        let picked = tree.write("mystery-clip");
+        tree.write("Season/unnamed");
+        tree.write("Season/bonus.mp4");
+
+        let collected = collect_video_paths(
+            vec![picked.clone(), path_string(&tree.root.join("Season"))],
+            vec!["mp4".into()],
+        )
+        .expect("a path list");
+
+        assert_eq!(names(&collected), ["mystery-clip", "bonus.mp4"]);
+    }
+
+    /// Nothing to collect is an empty answer, not a failure.
+    #[test]
+    fn collect_answers_nothing_for_an_empty_selection() {
+        assert!(collect_video_paths(Vec::new(), vec!["mp4".into()])
+            .expect("a path list")
+            .is_empty());
+
+        let tree = TempTree::new("empty");
+        let collected = collect_video_paths(vec![path_string(&tree.root)], vec!["mp4".into()])
+            .expect("a path list");
+        assert!(collected.is_empty());
     }
 
     #[test]

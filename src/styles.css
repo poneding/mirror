@@ -438,23 +438,106 @@ input:focus-visible {
   letter-spacing: -.03em;
 }
 
-.home-open {
+/* ---------- the open control ---------- */
+
+/* One control, two hit areas: the label side opens files, the caret side offers
+   both ways in. The hairline between them is what makes the second hit area
+   visible — a button that silently did two things would be a trap. */
+.open-split {
+  display: inline-flex;
+  align-items: stretch;
+  border-radius: 9px;
+  overflow: hidden;
+  transition: opacity .2s ease, transform .2s ease;
+}
+
+.open-split > button {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 4px;
-  padding: 9px 16px;
   border: 0;
-  border-radius: 9px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+/* The divider is the caret's own ink at low strength, so it reads as a seam on
+   the primary fill and on chrome alike, in either theme. */
+.open-split > button + button { position: relative; }
+.open-split > button + button::before {
+  content: "";
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  left: 0;
+  width: 1px;
+  background: currentColor;
+  opacity: .22;
+}
+
+/* The fill belongs to the whole control; a hover lights only the half under the
+   pointer, because the halves do different things. */
+.open-split > button:hover { filter: brightness(1.14); }
+/* The ring goes inside: the control clips its halves to keep the radius. */
+.open-split > button:focus-visible { outline-offset: -2px; }
+
+.open-split.primary {
+  margin-top: 4px;
   color: var(--primary-foreground);
   background: var(--primary);
   font-size: 13px;
   font-weight: 500;
-  cursor: pointer;
-  transition: opacity .2s ease, transform .2s ease;
+}
+.open-split.primary:hover { transform: translateY(-1px); }
+.open-split.primary .open-main { gap: 8px; padding: 9px 14px; }
+.open-split.primary .open-caret { padding: 0 10px; }
+
+/* ---------- open menu ---------- */
+
+/* The caret's surface: the dropdown's material, with room for an icon beside
+   each label. It names both ways in, so the label half needs no legend. */
+.open-menu { position: relative; }
+
+.open-menu-list {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 100%;
+  padding: 4px;
+  border: 1px solid var(--glass-border-strong);
+  border-radius: 10px;
+  background: var(--glass-fill);
+  box-shadow: var(--glass-sheen), var(--shadow);
+  backdrop-filter: var(--glass-blur);
+  animation: combobox-in .14s ease;
+  white-space: nowrap;
 }
 
-.home-open:hover { opacity: .9; transform: translateY(-1px); }
+.open-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--muted-foreground);
+  background: transparent;
+  font-family: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color .15s ease, background .15s ease;
+}
+
+/* Hover and keyboard focus are one highlight: hovering moves focus to the action
+   under the pointer, so Enter always runs what the user is pointing at. */
+.open-menu-item:hover,
+.open-menu-item:focus-visible {
+  color: var(--foreground);
+  background: var(--glass-hover);
+}
 
 /* ---------- player chrome ---------- */
 /* A floating panel over the picture, not a bar across the window: it spans its

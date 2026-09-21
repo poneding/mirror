@@ -3,7 +3,9 @@ import {
   ChevronDown,
   Command,
   Download,
+  FileVideo,
   FolderOpen,
+  FolderPlus,
   History,
   Info,
   List,
@@ -103,6 +105,21 @@ import logo from "./assets/logo.png";
 
 const isTauri = () => "__TAURI_INTERNALS__" in window;
 
+/**
+ * Expands a selection of files and folders into video paths.
+ *
+ * Only the native side can enumerate a folder, so it answers with every video
+ * file under one, however deep it sits; the browser preview keeps the flat list
+ * its inputs produced.
+ */
+async function resolveVideoPaths(paths: string[]): Promise<string[]> {
+  if (!isTauri()) return paths;
+  return invoke<string[]>("collect_video_paths", {
+    paths,
+    extensions: SUPPORTED_VIDEO_EXTENSIONS,
+  }).catch(() => []);
+}
+
 /** Where the update notice is in its lifecycle; `Update` holds the release itself. */
 type UpdateStatus = "idle" | "checking" | "current" | "preview" | "installing" | "installed" | "error";
 
@@ -115,10 +132,14 @@ type SettingsSectionId = "appearance" | "playback" | "update" | "shortcuts" | "a
 const copy = {
   zh: {
     add: "添加视频",
-    open: "打开视频",
+    addFolder: "添加视频文件夹",
+    openMenu: "打开视频或文件夹",
+    openVideo: "打开视频",
+    openFolder: "打开文件夹",
     playlist: "播放列表",
     settings: "设置",
     noVideos: "播放列表还是空的",
+    noVideosFound: "没有找到视频文件",
     addFirst: "添加一个视频，开始你的第一段播放",
     video: "视频",
     audio: "音频",
@@ -193,10 +214,14 @@ const copy = {
   },
   en: {
     add: "Add video",
-    open: "Open video",
+    addFolder: "Add video folder",
+    openMenu: "Open video or folder",
+    openVideo: "Open video",
+    openFolder: "Open folder",
     playlist: "Playlist",
     settings: "Settings",
     noVideos: "Your playlist is empty",
+    noVideosFound: "No videos found",
     addFirst: "Add a video to start your first session",
     video: "Video",
     audio: "Audio",
@@ -304,6 +329,7 @@ type TipProps = {
 function App() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
   const titlebarNameRef = useRef<HTMLSpanElement>(null);
   const hideChromeTimer = useRef<number | undefined>(undefined);
   const osdTimer = useRef<number | undefined>(undefined);
@@ -376,6 +402,15 @@ function App() {
   }, []);
 
   useEffect(() => () => window.clearTimeout(osdTimer.current), []);
+
+  /**
+   * The browser preview picks folders through the file input's directory mode.
+   * React has no typed prop for the attribute that turns it on, so it is set
+   * here rather than cast into the JSX.
+   */
+  useEffect(() => {
+    folderInputRef.current?.setAttribute("webkitdirectory", "");
+  }, []);
 
   // Version comes from the bundle itself, so it never drifts from what shipped.
   useEffect(() => {
@@ -739,27 +774,6 @@ function App() {
     }
   }, [activeItem, panel]);
 
-  useEffect(() => {
-    if (!isTauri()) return;
-    let unlisten: (() => void) | undefined;
-    void getCurrentWebview()
-      .onDragDropEvent((event) => {
-        if (event.payload.type === "over") {
-          setIsDragOver(true);
-        } else if (event.payload.type === "drop") {
-          setIsDragOver(false);
-          createItemsFromPaths(event.payload.paths);
-        } else {
-          setIsDragOver(false);
-        }
-      })
-      .then((dispose) => {
-        unlisten = dispose;
-      })
-      .catch(() => undefined);
-    return () => unlisten?.();
-  }, []);
-
   /* The clock is armed when a picture arrives and when a panel closes: the bars
      are for the pointer, so they step aside on their own once it stops moving.
      A paused picture is no reason to keep them — the window is still showing
@@ -783,36 +797,54 @@ function App() {
     setPanel(null);
   };
 
+  /**
+   * Adds picked files to the playlist.
+   *
+   * A browser folder pick hands back every file in the tree, each named
+   * relative to the folder it came from, so the same file name twice in two
+   * subdirectories stays tellable apart.
+   */
   const createItems = (files: FileList | File[]) => {
     const selected = Array.from(files).filter((file) => isSupportedVideo(file.name));
     const created = selected.map((file) => ({
       id: `${file.name}-${file.size}-${file.lastModified}-${Math.random()}`,
       name: file.name,
-      path: file.name,
+      path: file.webkitRelativePath || file.name,
       source: URL.createObjectURL(file),
       duration: 0,
     }));
-    if (created.length === 0) return;
+    if (created.length === 0) {
+      flashOsd(<FolderOpen size={16} />, strings.noVideosFound);
+      return;
+    }
     setItems((current) => [...current, ...created]);
     setActiveId(created[0].id);
     setPanel(null);
   };
 
-  const createItemsFromPaths = (paths: string[]) => {
-    const created = paths
-      .filter((path) => isSupportedVideo(fileNameFromPath(path)))
-      .map((path) => ({
-        id: `${path}-${Math.random()}`,
-        name: fileNameFromPath(path),
-        path,
-        source: convertFileSrc(path),
-        duration: 0,
-      }));
-    if (!created.length) return;
-    setItems((current) => [...current, ...created]);
-    setActiveId(created[0].id);
-    setPanel(null);
-  };
+  /** Turns a picked selection into playlist items, folders and all. */
+  const createItemsFromPaths = useCallback(
+    async (paths: string[]) => {
+      const expanded = await resolveVideoPaths(paths);
+      const created = expanded
+        .filter((path) => isSupportedVideo(fileNameFromPath(path)))
+        .map((path) => ({
+          id: `${path}-${Math.random()}`,
+          name: fileNameFromPath(path),
+          path,
+          source: convertFileSrc(path),
+          duration: 0,
+        }));
+      if (!created.length) {
+        flashOsd(<FolderOpen size={16} />, strings.noVideosFound);
+        return;
+      }
+      setItems((current) => [...current, ...created]);
+      setActiveId(created[0].id);
+      setPanel(null);
+    },
+    [flashOsd, strings],
+  );
 
   const addVideos = async () => {
     if (!isTauri()) {
@@ -826,8 +858,44 @@ function App() {
     });
     if (!selected) return;
     const paths = Array.isArray(selected) ? selected : [selected];
-    createItemsFromPaths(paths);
+    await createItemsFromPaths(paths);
   };
+
+  /** Opens folders; every video inside one joins the playlist. */
+  const addFolder = async () => {
+    if (!isTauri()) {
+      folderInputRef.current?.click();
+      return;
+    }
+    const selected = await open({ multiple: true, directory: true });
+    if (!selected) return;
+    const paths = Array.isArray(selected) ? selected : [selected];
+    await createItemsFromPaths(paths);
+  };
+
+  /* What is dropped on the window is a selection like any other — a folder
+     among it brings the videos inside it.
+
+     The listener is disposed through its own promise rather than a captured
+     variable: subscribing is asynchronous, and under StrictMode the cleanup can
+     run before it resolves. Leaving that first listener behind made every drop
+     arrive twice in development. */
+  useEffect(() => {
+    if (!isTauri()) return;
+    const subscription = getCurrentWebview().onDragDropEvent((event) => {
+      if (event.payload.type === "over") {
+        setIsDragOver(true);
+      } else if (event.payload.type === "drop") {
+        setIsDragOver(false);
+        void createItemsFromPaths(event.payload.paths);
+      } else {
+        setIsDragOver(false);
+      }
+    });
+    return () => {
+      void subscription.then((dispose) => dispose()).catch(() => undefined);
+    };
+  }, [createItemsFromPaths]);
 
   const handleFileInput = (event: ChangeEvent<HTMLInputElement>) => {
     if (event.target.files) createItems(event.target.files);
@@ -1228,10 +1296,11 @@ function App() {
           <div className="home">
             <img className="home-logo" src={logo} alt="" width={72} height={72} draggable={false} />
             <h1 className="home-title">Mirror Player</h1>
-            <button className="home-open" onClick={() => void addVideos()}>
-              <FolderOpen size={16} />
-              {strings.open}
-            </button>
+            <OpenSplitButton
+              strings={strings}
+              onOpenFiles={() => void addVideos()}
+              onOpenFolder={() => void addFolder()}
+            />
           </div>
         )}
         {isDragOver && (
@@ -1297,6 +1366,7 @@ function App() {
       )}
 
       <input ref={fileInputRef} className="hidden-input" type="file" accept="video/*" multiple onChange={handleFileInput} />
+      <input ref={folderInputRef} className="hidden-input" type="file" accept="video/*" multiple onChange={handleFileInput} />
 
       {panel && (
         <>
@@ -1342,6 +1412,7 @@ function App() {
                     {panelTab === "playlist" ? (
                       <>
                         <button className="icon-button subtle" onClick={() => void addVideos()} {...tipFor("add", strings.add)} aria-label={strings.add}><Plus size={15} /></button>
+                        <button className="icon-button subtle" onClick={() => void addFolder()} {...tipFor("add-folder", strings.addFolder)} aria-label={strings.addFolder}><FolderPlus size={15} /></button>
                         <button className="icon-button subtle danger" onClick={clearPlaylist} disabled={items.length === 0} {...tipFor("clear-playlist", strings.clearPlaylist)} aria-label={strings.clearPlaylist}><Trash2 size={14} /></button>
                       </>
                     ) : (
@@ -1862,6 +1933,185 @@ function ScrollArea({
  * from reaching the global shortcut listener — otherwise Space would also
  * toggle playback and the arrows would change the volume.
  */
+/**
+ * The one button that opens either video files or a folder.
+ *
+ * A native picker is either a file chooser or a folder chooser — it cannot offer
+ * both — so the button carries the choice in a small menu instead. What is
+ * dropped on the window needs no menu: files and folders both arrive as paths.
+ *
+ * Keys this control handles stop propagating, because the global shortcut
+ * listener sits on `window`: without that, `Space` would also toggle playback,
+ * `Enter` would also go fullscreen and the arrows would also seek.
+ */
+/**
+ * The home screen's one way in, split in two: the label side opens video files
+ * straight away, the caret side offers both ways in.
+ *
+ * A native picker is either a file chooser or a folder chooser — it cannot offer
+ * both — so the folder sits one caret away instead of behind a menu that charged
+ * the common case a click. What is dropped on the window needs neither: files
+ * and folders both arrive as paths. The playlist toolbar, which has the room,
+ * says the same thing with two buttons instead.
+ *
+ * Keys this control handles stop propagating, because the global shortcut
+ * listener sits on `window`: without that, `Space` would also toggle playback,
+ * `Enter` would also go fullscreen and the arrows would also seek.
+ */
+function OpenSplitButton({
+  strings,
+  onOpenFiles,
+  onOpenFolder,
+}: {
+  strings: Copy;
+  onOpenFiles: () => void;
+  onOpenFolder: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(0);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const caretRef = useRef<HTMLButtonElement>(null);
+  const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const menuId = useId();
+
+  const items = [
+    { id: "files", label: strings.openVideo, icon: <FileVideo size={14} aria-hidden="true" />, run: onOpenFiles },
+    { id: "folder", label: strings.openFolder, icon: <FolderOpen size={14} aria-hidden="true" />, run: onOpenFolder },
+  ];
+
+  const openMenu = () => {
+    setActive(0);
+    setOpen(true);
+  };
+
+  /* Opening moves focus to the first action, so the menu works from the
+     keyboard alone; the actions are kept out of the Tab order for that. */
+  useEffect(() => {
+    if (open) itemRefs.current[0]?.focus();
+  }, [open]);
+
+  // Clicking anywhere outside closes it, as the dropdown does.
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (rootRef.current && !rootRef.current.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [open]);
+
+  const close = (refocus: boolean) => {
+    setOpen(false);
+    if (refocus) caretRef.current?.focus();
+  };
+
+  const focusItem = (index: number) => {
+    setActive(index);
+    itemRefs.current[index]?.focus();
+  };
+
+  /* Focus leaving the control — Tab, or a click on something unfocusable —
+     closes the menu. Focus has already moved on, so this never pulls it back. */
+  const onBlur = (event: ReactFocusEvent<HTMLDivElement>) => {
+    if (!open) return;
+    const next = event.relatedTarget as Node | null;
+    if (!next || !event.currentTarget.contains(next)) setOpen(false);
+  };
+
+  const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const { key } = event;
+
+    if (key === "Escape" && open) {
+      event.stopPropagation();
+      event.preventDefault();
+      close(true);
+      return;
+    }
+
+    if (!open) {
+      // Both halves are real buttons, so `Space` and `Enter` are their native
+      // activation. Only the shortcut listener has to be kept out of it.
+      if (key === "Enter" || key === " ") event.stopPropagation();
+      else if (key === "ArrowDown" || key === "ArrowUp") {
+        event.stopPropagation();
+        event.preventDefault();
+        openMenu();
+      }
+      return;
+    }
+
+    if (key === " " || key === "Enter" || key.startsWith("Arrow")) event.stopPropagation();
+    if (key === "ArrowDown" || key === "ArrowUp") {
+      event.preventDefault();
+      focusItem((active + (key === "ArrowDown" ? 1 : -1) + items.length) % items.length);
+    }
+  };
+
+  return (
+    <div
+      className="open-menu"
+      ref={rootRef}
+      onKeyDown={onKeyDown}
+      onBlur={onBlur}
+    >
+      <div className="open-split primary">
+        <button
+          type="button"
+          className="open-main"
+          aria-label={strings.openVideo}
+          onClick={() => {
+            // The file dialog is about to take the screen; a menu left open
+            // behind it would still be there when the picker closes.
+            close(false);
+            onOpenFiles();
+          }}
+        >
+          <FileVideo size={16} aria-hidden="true" />
+          <span>{strings.openVideo}</span>
+        </button>
+        <button
+          type="button"
+          ref={caretRef}
+          className="open-caret"
+          aria-label={strings.openMenu}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          aria-controls={menuId}
+          onClick={() => (open ? close(false) : openMenu())}
+        >
+          <ChevronDown size={13} aria-hidden="true" />
+        </button>
+      </div>
+      {open && (
+        <div className="open-menu-list" id={menuId} role="menu" aria-label={strings.openMenu}>
+          {items.map((item, index) => (
+            <button
+              key={item.id}
+              ref={(node) => {
+                itemRefs.current[index] = node;
+              }}
+              type="button"
+              role="menuitem"
+              tabIndex={-1}
+              className="open-menu-item"
+              onMouseEnter={() => focusItem(index)}
+              onClick={() => {
+                // The caret keeps focus, so the native picker has somewhere to
+                // come back to.
+                close(true);
+                item.run();
+              }}
+            >
+              {item.icon}
+              <span>{item.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Combobox({
   value,
   options,

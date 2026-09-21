@@ -265,6 +265,42 @@ a request to play, so the user starts it. Adding a file, picking a playlist or
 history row, or moving to another track still plays that item. `resolveAutoplay`
 (`lib/player.ts`) owns this rule.
 
+**Opening files and folders**: one control carries both ways in, split in two — the
+label half opens video files straight away (one or many, through the platform
+picker), the caret half opens a small menu with 打开视频 / 打开文件夹. The playlist
+toolbar spells the same thing out as two plain buttons (添加视频 / 添加视频文件夹),
+because there it has the room to. The split is a concession to the platform: a
+native picker is either a file chooser or a folder chooser. Windows toggles
+between them with `FOS_PICKFOLDERS` (*"folders rather than files"*), rfd
+hard-wires the two macOS modes on `NSOpenPanel`, and the plugin exposes only
+`directory: true/false`, so no one dialog can offer both and upstream still has
+this open (tauri-apps/plugins-workspace#2137, PolyMeilex/rfd#131). Do not collapse
+the home control back to a single hit area without replacing it with those two
+buttons: opening a folder would then charge the common case a click. The label
+half is also what closes an open menu before the picker takes the screen.
+
+A folder brings every video under it: the folder's own files first, then its
+subdirectories, both name-sorted case-insensitively. A dropped selection goes
+through the same path, so dropping a folder loads it too. Only the native side can
+enumerate a directory, so `collect_video_paths` (`lib.rs`) does that and is handed
+`SUPPORTED_VIDEO_EXTENSIONS` — the extension list stays in `lib/player.ts` and is
+not written down a second time in Rust. A file the user picked is added even
+without an extension — the media element decides what it can decode — while a file
+the walk finds must carry a listed one. Unreadable entries are skipped, and a
+directory reached through a symlink is not walked: a link back to a parent would
+loop forever. The browser preview has no such walk; it uses the file input's
+`webkitdirectory` mode instead.
+
+The menu owns its keys the way the dropdown does: it stops propagation so `Space`
+and `Enter` cannot also reach the player (the halves are real buttons, so their
+native activation would otherwise fire on top of a shortcut) and `Esc` closes the
+menu before the shell sees it.
+
+The drag-and-drop listener must be disposed through its own subscription promise
+rather than a captured `let`: subscribing is asynchronous, and under StrictMode the
+cleanup can run before it resolves, which left the first listener behind and made
+every drop arrive twice in development.
+
 **Settings panel**: a rail on the left switches between the five sections
 (外观 / 播放 / 更新 / 快捷键 / 关于); the body shows the selected one alone, so
 reaching 关于 no longer means scrolling past the other four. Section icons are
