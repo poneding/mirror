@@ -15,7 +15,11 @@
         "shadow": true,
         "titleBarStyle": "Overlay",
         "hiddenTitle": true,
-        "decorations": true
+        "decorations": true,
+        "trafficLightPosition": {
+          "x": 7,
+          "y": 16
+        }
       }
     ]
   }

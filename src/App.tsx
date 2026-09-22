@@ -961,6 +961,28 @@ function App() {
     return () => window.clearTimeout(hideChromeTimer.current);
   }, [activeItem, panel]);
 
+  // A panel is a surface the user opened on purpose, so while one is up the
+  // titlebar stays out of the auto-hide cycle: the window has to remain
+  // draggable and closable even when the pointer leaves it. The control bar is
+  // the part that steps aside, which `.panel-open` in the stylesheet does.
+  const chromeShown = chromeVisible || panel !== null;
+
+  /**
+   * macOS paints the system's three window buttons over Mirror's own titlebar,
+   * so they are not the stylesheet's to take away: the bar would slide off the
+   * picture and leave the dots hanging on it. They follow the same flag that
+   * hides the bar, and the native side fades them on the bar's own clock.
+   *
+   * Fullscreen is the exception — the system owns the titlebar there and
+   * reveals it on its own terms, so Mirror stays out of the way and re-states
+   * the truth when the window leaves it, which is what `isFullscreen` re-runs
+   * this for.
+   */
+  useEffect(() => {
+    if (!isMac || !isTauri() || isFullscreen) return;
+    void invoke("set_traffic_lights_visible", { visible: chromeShown }).catch(() => undefined);
+  }, [chromeShown, isFullscreen, isMac]);
+
   const selectItem = (id: string) => {
     setActiveId(id);
     setPanel(null);
@@ -1413,12 +1435,6 @@ function App() {
     { key: "single", label: strings.repeatOne, icon: Repeat2 },
     { key: "list", label: strings.repeatList, icon: ListVideo },
   ];
-
-  // A panel is a surface the user opened on purpose, so while one is up the
-  // titlebar stays out of the auto-hide cycle: the window has to remain
-  // draggable and closable even when the pointer leaves it. The control bar is
-  // the part that steps aside, which `.panel-open` in the stylesheet does.
-  const chromeShown = chromeVisible || panel !== null;
 
   return (
     <main

@@ -245,6 +245,32 @@ macOS keeps minimise + close. The glyph follows the real window state, synced
 through `onResized` so it stays correct when the window is maximised by another
 route (double-click, OS shortcut).
 
+**macOS traffic lights**: macOS is the one platform where the window is not
+undecorated — `tauri.macos.conf.json` sets `titleBarStyle: "Overlay"` with
+`hiddenTitle` and `decorations: true`, which keeps the system's three window
+buttons painted *over* Mirror's own titlebar. They are placed by
+`trafficLightPosition` (the config field Tauri wants for exactly this style) and
+faded by `set_traffic_lights_visible` (`lib.rs`), because the stylesheet can
+neither move the dots into the bar nor take them away with it. Both numbers are
+kept in step with the stylesheet by a test. The position is `--titlebar-height /
+2 - 2`: macOS centres the stock buttons 14pt down its own 28pt titlebar (their
+frame is `(7, 6, 14, 16)` in a 28pt view), and tao's inset puts that centre at
+`inset + 2` — measured on the live window, not derived. Left at the stock height
+the dots read as "a bit high" in a 36px bar, because they are. The fade is the
+bar's own clock (`--dur-slow`, `TITLEBAR_FADE_SECONDS` in `lib.rs`), so the dots
+leave and arrive with the bar instead of blinking out of it. Two details are
+load-bearing. A hidden button is *hidden*, not transparent: a click at zero
+alpha still lands, and the pointer can be parked on one when the titlebar times
+out, so `alphaValue` alone would turn a stray click at the top-left into a
+closed window. And a fade that is overtaken — the pointer comes back mid-slide —
+must not hide the buttons on its way out, which is what the
+`TRAFFIC_LIGHTS_VISIBLE` flag is read for. Fullscreen is the one place Mirror
+keeps its hands off, because the system owns the titlebar there: a request that
+arrives while the window is fullscreen is dropped, and the frontend re-states
+the truth on the way out of Mirror's own toggle — a window taken fullscreen by
+the system shortcut (⌃⌘F) instead settles on the next pointer-driven change.
+Everywhere but macOS the command is a no-op.
+
 **Fullscreen from a maximized window** needs a Windows-only detour in
 `set_window_fullscreen` (`lib.rs`), and both halves of it are load-bearing. Win32
 ignores `SetWindowPos` geometry while a window carries `WS_MAXIMIZE`, and tao

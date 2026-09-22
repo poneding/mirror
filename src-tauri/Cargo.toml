@@ -25,6 +25,24 @@ fontdb = "0.24.0"
 [target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
 tauri-plugin-updater = "2.11"
 
+# macOS paints its three window buttons itself, as AppKit views over Mirror's
+# own titlebar. Hiding them with the bar means reaching those views, so the
+# bindings tao already builds against are declared here too.
+[target.'cfg(target_os = "macos")'.dependencies]
+block2 = "0.6"
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", default-features = false, features = [
+  "std",
+  "block2",
+  "NSAnimation",
+  "NSAnimationContext",
+  "NSButton",
+  "NSControl",
+  "NSResponder",
+  "NSView",
+  "NSWindow",
+] }
+
 [features]
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]

@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use tauri::{LogicalSize, Manager, Size, Window};
 
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "windows", target_os = "macos"))]
 use std::sync::atomic::{AtomicBool, Ordering};
 
 /// Whether Mirror dropped a maximized window to enter fullscreen, so the way out
@@ -118,6 +118,125 @@ fn set_window_fullscreen(window: Window, fullscreen: bool) -> Result<(), String>
     }
 
     Ok(())
+}
+
+/// The window buttons follow the titlebar they sit on.
+///
+/// Mirror draws the titlebar itself, but on macOS the system's three window
+/// buttons are AppKit views painted over the top of it: the stylesheet can
+/// slide the bar away, and the dots would be left hanging over the picture.
+/// They are not Mirror's to draw either, so the frontend pushes the state it
+/// already keeps for the bar, and this puts the buttons in it.
+///
+/// The fade is the titlebar's own (`--dur-slow` in the stylesheet, kept in step
+/// by a test), so the dots leave and arrive with the bar instead of blinking
+/// out of it. A fade that is overtaken — the pointer came back mid-slide — must
+/// not hide the buttons on its way out, which is what `TRAFFIC_LIGHTS_VISIBLE`
+/// is for: the settling fade reads the state that is wanted *now*, not the one
+/// it was started with.
+///
+/// Fullscreen is the one place Mirror keeps its hands off: the system owns the
+/// titlebar there and reveals it on its own terms, so a request that arrives
+/// while the window is fullscreen is dropped. The frontend re-states the truth
+/// when the window leaves fullscreen, which is what puts the lights back.
+#[tauri::command]
+fn set_traffic_lights_visible(window: Window, visible: bool) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        if window.is_fullscreen().unwrap_or(false) {
+            return Ok(());
+        }
+
+        // The closure outlives this call when it is queued, so it carries its
+        // own handle to the window rather than borrowing this one.
+        let window_ = window.clone();
+        window
+            .run_on_main_thread(move || fade_traffic_lights(&window_, visible))
+            .map_err(|error| error.to_string())
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (window, visible);
+        Ok(())
+    }
+}
+
+/// Whether the traffic lights are wanted, as of the newest request.
+#[cfg(target_os = "macos")]
+static TRAFFIC_LIGHTS_VISIBLE: AtomicBool = AtomicBool::new(true);
+
+/// How long the buttons take to leave or arrive. The stylesheet's `--dur-slow`,
+/// which is the clock the titlebar itself moves on.
+#[cfg(target_os = "macos")]
+const TITLEBAR_FADE_SECONDS: f64 = 0.24;
+
+/// Fades the three window buttons in or out, hiding them once they are gone.
+///
+/// A button at zero alpha still takes clicks, and the pointer can be parked on
+/// one when the titlebar times out: `alphaValue` alone would turn a stray click
+/// at the top-left into a closed window, so a hidden button is *hidden*.
+#[cfg(target_os = "macos")]
+fn fade_traffic_lights(window: &Window, visible: bool) {
+    use block2::RcBlock;
+    use objc2_app_kit::{
+        NSAnimatablePropertyContainer, NSAnimationContext, NSButton, NSWindow, NSWindowButton,
+    };
+    use std::ptr::NonNull;
+
+    let Ok(ns_window) = window.ns_window() else {
+        return;
+    };
+    // SAFETY: the handle is the window's own live `NSWindow` — it is autoreleased
+    // by tao and outlives this call — and `run_on_main_thread` is what puts us on
+    // the main thread, where AppKit views may be touched at all.
+    let ns_window: &NSWindow = unsafe { &*ns_window.cast::<NSWindow>() };
+
+    let buttons: Vec<objc2::rc::Retained<NSButton>> = [
+        NSWindowButton::CloseButton,
+        NSWindowButton::MiniaturizeButton,
+        NSWindowButton::ZoomButton,
+    ]
+    .into_iter()
+    .filter_map(|kind| ns_window.standardWindowButton(kind))
+    .collect();
+    if buttons.is_empty() {
+        return;
+    }
+
+    TRAFFIC_LIGHTS_VISIBLE.store(visible, Ordering::SeqCst);
+
+    // Arriving, the buttons come back at once and fade in behind the bar; they
+    // are only hidden by the fade that took them away.
+    if visible {
+        for button in &buttons {
+            button.setHidden(false);
+        }
+    }
+
+    let changes = {
+        let buttons = buttons.clone();
+        RcBlock::new(move |context: NonNull<NSAnimationContext>| {
+            // SAFETY: AppKit hands the block the context it is running in.
+            let context = unsafe { context.as_ref() };
+            context.setDuration(TITLEBAR_FADE_SECONDS);
+            for button in &buttons {
+                button
+                    .animator()
+                    .setAlphaValue(if visible { 1.0 } else { 0.0 });
+            }
+        })
+    };
+    let settled = RcBlock::new(move || {
+        if TRAFFIC_LIGHTS_VISIBLE.load(Ordering::SeqCst) {
+            return;
+        }
+        for button in &buttons {
+            button.setHidden(true);
+        }
+    });
+
+    NSAnimationContext::runAnimationGroup_completionHandler(&changes, Some(&settled));
 }
 
 /// The system's installed fonts, split into the two lists the settings panel
@@ -322,6 +441,7 @@ pub fn run() {
             resize_to_video,
             set_window_pinned,
             set_window_fullscreen,
+            set_traffic_lights_visible,
             list_system_fonts,
             collect_video_paths
         ])
