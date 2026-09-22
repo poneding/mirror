@@ -161,3 +161,54 @@ jobs:
           releaseBody: ${{ needs.changelog.outputs.changelog }}
           releaseDraft: false
           args: ${{ matrix.args }}
+
+  # tauri-action v1 writes `latest.json` with `api.github.com` asset URLs — it
+  # switched to them for private-repo support — and GitHub rate-limits
+  # unauthenticated API downloads to 60 an hour per IP. On a public repo that is
+  # "Download request failed with status: 403 Forbidden" for every install;
+  # v0.1.0-alpha.5 shipped that way. Every build job uploads its own copy of the
+  # feed, so the rewrite runs once, after all of them, and turns each API URL
+  # into the release's CDN URL for the same asset. It is idempotent: a feed that
+  # already holds CDN URLs is left alone.
+  updater-feed:
+    name: Updater feed
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Rewrite latest.json to the release's download URLs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name || github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          gh release download "$TAG" -R "$REPO" --pattern latest.json --clobber
+
+          # asset id -> name, so an API URL can become the CDN URL for the same
+          # file without an API call from the client.
+          gh api "repos/$REPO/releases/tags/$TAG" --paginate \
+            --jq '.assets[] | "\(.id)\t\(.name)"' > assets.tsv
+
+          jq --arg repo "$REPO" --arg tag "$TAG" --rawfile assets assets.tsv '
+            ($assets | split("\n") | map(select(length > 0) | split("\t") | {(.[0]): .[1]}) | add) as $names
+            | .platforms |= with_entries(
+                .value.url |= (
+                  if test("/releases/assets/[0-9]+$")
+                  then (capture("/releases/assets/(?<id>[0-9]+)$").id) as $id
+                       | "https://github.com/\($repo)/releases/download/\($tag)/\($names[$id])"
+                  else .
+                  end
+                )
+              )
+          ' latest.json > rewritten.json
+
+          # A URL the rewrite did not reach, or an id with no asset behind it,
+          # would leave a feed that still 403s or ends in `/null`.
+          if jq -e '[.platforms[].url | select(test("api.github.com") or test("/null$"))] | length > 0' rewritten.json >/dev/null; then
+            echo "::error::latest.json still points at the API or a missing asset"
+            exit 1
+          fi
+
+          mv rewritten.json latest.json
+          gh release upload "$TAG" latest.json -R "$REPO" --clobber

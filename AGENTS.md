@@ -478,18 +478,27 @@ needs that manual step; pushes to `main` publish nothing.
 2. `.github/workflows/release.yml` rejects non-SemVer tags, stamps the version
    into `package.json`, `package-lock.json`, `src-tauri/tauri.conf.json` and
    `src-tauri/Cargo.toml`, creates the release, writes the git-cliff changelog
-   into its body, then builds and signs every desktop target and uploads the
-   bundles plus `latest.json`.
+   into its body, then builds and signs every desktop target, uploads the
+   bundles plus `latest.json`, and rewrites that feed to the release's own
+   download URLs.
 3. That body *is* the changelog the app shows: `latest.json` carries it as
    `notes`, and the update notice renders it through `lib/markdown.ts` as
    elements — release notes are remote text, so they are never injected as HTML.
 
-Four things must stay in step or updates break, and none of them fail at build
+Five things must stay in step or updates break, and none of them fail at build
 or test time:
 
 - The tag is the single source of truth for the version. Editing a version
   literal by hand makes `tauri.conf.json`, `Cargo.toml` and the tag drift; use
   `node scripts/set-version.mjs v1.2.3`.
+- `latest.json` must carry the release's own CDN URLs
+  (`releases/download/<tag>/<asset>`), never `api.github.com` asset URLs.
+  tauri-action v1 writes the API form for private-repo support and has no input
+  to turn it off, and GitHub rate-limits unauthenticated API downloads to 60 an
+  hour per IP: every install then fails with "Download request failed with
+  status: 403 Forbidden", which is how v0.1.0-alpha.5 shipped. The
+  `updater-feed` job rewrites the feed once all builds have uploaded their own
+  copies; `src/lib/updater-feed.test.ts` fails if it stops doing it.
 - `plugins > updater > pubkey` must be the public half of the private key in the
   `TAURI_SIGNING_PRIVATE_KEY` repository secret. The bundler only *warns* on a
   mismatch; the app then refuses the update forever.
