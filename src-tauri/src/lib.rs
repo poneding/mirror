@@ -416,6 +416,24 @@ fn apply_glass(window: &tauri::WebviewWindow) {
 fn apply_glass(window: &tauri::WebviewWindow) {
     use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
     let _ = apply_vibrancy(window, NSVisualEffectMaterial::HudWindow, None, Some(12.0));
+
+    // The window's edge highlight is drawn as part of its shadow, and on a
+    // transparent window it reads as a white border: measured over a black
+    // picture, one device pixel of white at about 10% alpha down the left,
+    // right and bottom edges, brighter across the top. It is painted above the
+    // page — a black shell does not cover it — and it only shows where the
+    // picture is dark, which is the state Mirror is in whenever the chrome has
+    // hidden itself: a keyboard close (`Esc`) leaves the bars away with the
+    // pointer outside the window, so the border is what the user sees. Dropping
+    // the shadow removes it; a window that is its own canvas has no need of the
+    // OS one, and the rounded corners survive.
+    //
+    // The top edge is a second, separate line — the transparent titlebar's own
+    // highlight — and it is why `macOSPrivateApi` is on in `tauri.conf.json`:
+    // with the window actually transparent the page is composited over that
+    // highlight, while an opaque window leaves it on top. Both were measured on
+    // the live window, not reasoned about.
+    let _ = window.set_shadow(false);
 }
 
 #[cfg(not(any(target_os = "windows", target_os = "macos")))]

@@ -271,6 +271,23 @@ the truth on the way out of Mirror's own toggle — a window taken fullscreen by
 the system shortcut (⌃⌘F) instead settles on the next pointer-driven change.
 Everywhere but macOS the command is a no-op.
 
+**macOS draws a white edge around the window, and two settings keep it away.**
+The window's edge highlight is part of its shadow and is painted *above* the
+page — a black shell does not cover it — so it shows wherever the picture is
+dark, which is exactly the state Mirror is in once the chrome has hidden
+itself: `Esc` leaves the bars away with the pointer outside the window, so the
+border is what the user sees. Measured over a black picture it was one device
+pixel of white at about 10% alpha down the left, right and bottom edges, and two
+brighter pixels across the top. `set_shadow(false)` in the macOS `apply_glass`
+(`lib.rs`) removes the three sides; the top pair is the transparent titlebar's
+own highlight, and `macOSPrivateApi` in `tauri.conf.json` is what puts it under
+the page (the `macos-private-api` feature in `Cargo.toml` must be on for the
+config to take effect — `tauri dev` adds it, and the build warns without it).
+Both fail quietly if reverted, so `lib/window-edge.test.ts` reads the config and
+`lib.rs` and fails on either. The cost is the window's drop shadow on macOS: a
+window that is its own canvas has no need of the OS one, and the rounded corners
+survive.
+
 **Fullscreen from a maximized window** needs a Windows-only detour in
 `set_window_fullscreen` (`lib.rs`), and both halves of it are load-bearing. Win32
 ignores `SetWindowPos` geometry while a window carries `WS_MAXIMIZE`, and tao
