@@ -118,6 +118,11 @@ The Makefile targets the actual development environment, verified:
   plugin reads `tauri.conf.json > plugins > updater` when the app starts, not
   when it builds, so a malformed block fails at launch rather than at compile
   time.
+- The 关于 repository row is an ordinary `<a target="_blank">`; the opener
+  plugin is what hands that click to the system browser, and `opener:default`
+  (already granted) is what allows the call. Without the permission the plugin
+  still calls `preventDefault`, so the click does nothing at all — no error, no
+  tab.
 
 **CSS**
 - Use the shadcn default (neutral) palette via CSS variables defined in

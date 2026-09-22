@@ -3,6 +3,7 @@ import {
   ChevronDown,
   Command,
   Download,
+  ExternalLink,
   FileVideo,
   FolderOpen,
   FolderPlus,
@@ -1787,7 +1788,7 @@ function App() {
                   {settingsSection === "about" && (
                     <SettingSection icon={<Info size={14} />} title={strings.about}>
                       <div className="about-row"><span>{strings.version}</span><strong className="num">v{appVersion}</strong></div>
-                      <div className="about-row"><span>{strings.repository}</span><strong className="about-repo">{PROJECT.repository}</strong></div>
+                      <div className="about-row"><span>{strings.repository}</span><a className="about-repo" href={PROJECT.repository} target="_blank" rel="noreferrer"><span>{PROJECT.repository}</span><ExternalLink size={12} /></a></div>
                     </SettingSection>
                   )}
                 </ScrollArea>

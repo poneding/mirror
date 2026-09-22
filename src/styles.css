@@ -221,7 +221,8 @@ button {
 }
 
 button:focus-visible,
-input:focus-visible {
+input:focus-visible,
+a:focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
@@ -1437,15 +1438,38 @@ input {
 /* The value half of a row: the answer to the label, one size up and in the
    foreground ink. */
 .setting-label strong,
-.about-row strong {
+.about-row strong,
+.about-repo {
   color: var(--foreground);
   font-size: 12px;
   font-weight: 500;
 }
 
+/* The repository is the one value that leaves the app: a link the opener plugin
+   hands to the system browser (`_blank` is what its injected script looks for),
+   so it carries an arrow and answers the pointer with an underline like every
+   other control answers with a fill. */
 .about-repo {
-  overflow-wrap: anywhere;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  text-decoration: none;
   text-align: right;
+}
+
+.about-repo>span {
+  overflow-wrap: anywhere;
+}
+
+.about-repo>svg {
+  flex: none;
+  color: var(--muted-foreground);
+}
+
+.about-repo:hover,
+.about-repo:focus-visible {
+  text-decoration: underline;
 }
 
 /* ---------- combobox ---------- */
