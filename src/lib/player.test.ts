@@ -19,6 +19,7 @@ import {
   TOOLTIP_FLIP_PX,
   WINDOW_FIT,
   acceptsUpdate,
+  advanceSeek,
   advanceSeekHold,
   arrowSeekAmount,
   clamp,
@@ -44,7 +45,10 @@ import {
   nextIndex,
   parseHistory,
   parseStoredPlaylist,
+  PICTURE_STALL_CHECK_MS,
+  PICTURE_STALL_MS,
   pictureOffset,
+  pictureStalled,
   recordHistory,
   removeHistoryEntry,
   resolveActiveId,
@@ -55,6 +59,8 @@ import {
   resolveShortcut,
   resolveStoredFont,
   resumePosition,
+  seekBase,
+  type SeekState,
   shortcutKeys,
   snapSpeed,
   stepSpeed,
@@ -635,6 +641,78 @@ describe("hold-to-scan on the arrow keys", () => {
   it("waits long enough to tap and not long enough to feel stuck", () => {
     expect(HOLD_SPEED_DELAY_MS).toBeGreaterThanOrEqual(200);
     expect(HOLD_SPEED_DELAY_MS).toBeLessThanOrEqual(500);
+  });
+});
+
+describe("seek coalescing", () => {
+  const idle: SeekState = { pending: null };
+
+  it("applies a request straight away when nothing is seeking", () => {
+    expect(advanceSeek(idle, { type: "request", target: 40, seeking: false })).toEqual({
+      state: { pending: null },
+      step: { type: "apply", target: 40 },
+    });
+  });
+
+  it("holds a request that arrives while the element is seeking", () => {
+    expect(advanceSeek(idle, { type: "request", target: 40, seeking: true })).toEqual({
+      state: { pending: 40 },
+      step: { type: "idle" },
+    });
+  });
+
+  // The bug this exists for: twenty taps must not become twenty seeks.
+  it("keeps only the newest target while the element is seeking", () => {
+    let state: SeekState = idle;
+    for (let target = 10; target <= 200; target += 10) {
+      const result = advanceSeek(state, { type: "request", target, seeking: true });
+      expect(result.step).toEqual({ type: "idle" });
+      state = result.state;
+    }
+    expect(state).toEqual({ pending: 200 });
+  });
+
+  it("applies the waiting target when the seek in flight lands", () => {
+    const queued = advanceSeek(idle, { type: "request", target: 90, seeking: true });
+    expect(advanceSeek(queued.state, { type: "settled" })).toEqual({
+      state: { pending: null },
+      step: { type: "apply", target: 90 },
+    });
+  });
+
+  it("has nothing to hand over when the seek lands alone", () => {
+    expect(advanceSeek(idle, { type: "settled" })).toEqual({ state: idle, step: { type: "idle" } });
+  });
+
+  // Ten taps must mean ten steps even while the first one is still in flight.
+  it("adds a relative seek to the queued target when one is waiting", () => {
+    expect(seekBase(30, 10)).toBe(30);
+    expect(seekBase(null, 10)).toBe(10);
+  });
+
+  // A target waiting on a seek the element then ignored is stale: the element
+  // is the truth about what is in flight, so an idle request drops it.
+  it("drops a stale target when a request finds the element idle", () => {
+    const queued = advanceSeek(idle, { type: "request", target: 90, seeking: true });
+    expect(advanceSeek(queued.state, { type: "request", target: 30, seeking: false })).toEqual({
+      state: { pending: null },
+      step: { type: "apply", target: 30 },
+    });
+  });
+});
+
+describe("picture watchdog", () => {
+  it("only cries stall for a playing picture", () => {
+    expect(pictureStalled(true, true, PICTURE_STALL_MS)).toBe(true);
+    expect(pictureStalled(true, true, PICTURE_STALL_MS - 1)).toBe(false);
+    // Paused playback presents nothing, and an audio-only item never will.
+    expect(pictureStalled(false, true, PICTURE_STALL_MS * 10)).toBe(false);
+    expect(pictureStalled(true, false, PICTURE_STALL_MS * 10)).toBe(false);
+  });
+
+  it("checks often enough to matter, and not on every frame", () => {
+    expect(PICTURE_STALL_CHECK_MS).toBeLessThan(PICTURE_STALL_MS);
+    expect(PICTURE_STALL_MS).toBeLessThanOrEqual(3000);
   });
 });
 

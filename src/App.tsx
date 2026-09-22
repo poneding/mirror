@@ -47,6 +47,7 @@ import {
   HISTORY_WRITE_INTERVAL_MS,
   HOLD_SPEED_DELAY_MS,
   OSD_DURATION_MS,
+  PICTURE_STALL_CHECK_MS,
   PROJECT,
   SHORTCUT_ORDER,
   SPEED_STEPS,
@@ -60,6 +61,7 @@ import {
   type Theme,
   type HistoryEntry,
   acceptsUpdate,
+  advanceSeek,
   advanceSeekHold,
   arrowSeekAmount,
   clamp,
@@ -83,6 +85,7 @@ import {
   parseHistory,
   parseStoredPlaylist,
   pictureOffset,
+  pictureStalled,
   type PictureOffset,
   recordHistory,
   removeHistoryEntry,
@@ -94,7 +97,9 @@ import {
   resolveShortcut,
   resolveStoredFont,
   resumePosition,
+  seekBase,
   type SeekHoldState,
+  type SeekState,
   shortcutKeys,
   snapSpeed,
   stepSpeed,
@@ -339,6 +344,16 @@ function App() {
   const holdTimer = useRef<number | undefined>(undefined);
   /** The arrow key that is down, if any: a tap seeks, a hold scans. */
   const seekHold = useRef<SeekHoldState>(null);
+  /** The newest seek waiting for the one in flight to land; see `advanceSeek`. */
+  const seekQueue = useRef<SeekState>({ pending: null });
+  /**
+   * The position the last seek asked for, while the element has not reached it.
+   *
+   * WebKit can drop the seek it was told to perform and rewind the clock to
+   * where the player really is; the picture watchdog then has to know where the
+   * seek was meant to land, or it would faithfully preserve the stale position.
+   */
+  const seekTarget = useRef<number | null>(null);
   const [items, setItems] = useState<MediaItem[]>(() => parseStoredPlaylist(localStorage.getItem(STORAGE_KEYS.playlist)));
   const [activeId, setActiveId] = useState<string | null>(() => localStorage.getItem(STORAGE_KEYS.activeId));
   /**
@@ -636,6 +651,9 @@ function App() {
     launchIdRef.current = decision.launchId;
     video.src = activeSource;
     video.load();
+    // A target that was waiting for the old media has nothing left to land on.
+    seekQueue.current = { pending: null };
+    seekTarget.current = null;
     setDuration(0);
     setCurrentTime(0);
     if (decision.autoplay) void video.play().catch(() => setIsPlaying(false));
@@ -722,6 +740,56 @@ function App() {
     document.addEventListener("fullscreenchange", handleFullscreen);
     return () => document.removeEventListener("fullscreenchange", handleFullscreen);
   }, []);
+
+  /**
+   * The picture watchdog.
+   *
+   * WebKit's macOS media backend can stop presenting frames after a burst of
+   * seeks while the clock keeps running — the element says it is playing and
+   * `currentTime` advances, but the picture never changes again. A re-seek to
+   * the position the element already claims brings it straight back, so the
+   * element's frame callbacks are used as a heartbeat: when a playing picture
+   * stops beating, Mirror nudges it to where it should already be.
+   *
+   * `pictureStalled` owns the rule. A seek is a legitimate gap, and a window
+   * nobody can see presents nothing, so both reset the heartbeat instead of
+   * triggering a nudge.
+   */
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || typeof video.requestVideoFrameCallback !== "function") return;
+    let lastFrame = performance.now();
+    const beat = () => {
+      lastFrame = performance.now();
+    };
+    let handle = video.requestVideoFrameCallback(function frame() {
+      beat();
+      handle = video.requestVideoFrameCallback(frame);
+    });
+    // Landing a seek and starting playback are both moments where a picture may
+    // legitimately take a while to appear; neither is a stall.
+    video.addEventListener("seeked", beat);
+    video.addEventListener("playing", beat);
+    const timer = window.setInterval(() => {
+      if (video.seeking || document.hidden) {
+        lastFrame = performance.now();
+        return;
+      }
+      if (!pictureStalled(!video.paused, video.videoWidth > 0, performance.now() - lastFrame)) return;
+      lastFrame = performance.now();
+      // Where the seek was meant to land, unless the element has already gone
+      // past it — a nudge never drags the picture backwards.
+      const position = Math.max(video.currentTime, seekTarget.current ?? 0);
+      seekTarget.current = position;
+      video.currentTime = position;
+    }, PICTURE_STALL_CHECK_MS);
+    return () => {
+      video.cancelVideoFrameCallback(handle);
+      video.removeEventListener("seeked", beat);
+      video.removeEventListener("playing", beat);
+      window.clearInterval(timer);
+    };
+  }, [activeId, activeItem]);
 
   // Keep the maximize/restore glyph in sync when the window changes state by
   // any route (our button, double-click, or an OS shortcut).
@@ -988,6 +1056,8 @@ function App() {
     if (!video) return;
     const nextTime = video.currentTime || 0;
     setCurrentTime(nextTime);
+    // The element has arrived, so the seek has nothing left to answer for.
+    if (seekTarget.current !== null && nextTime >= seekTarget.current) seekTarget.current = null;
     if (!activeItem || autoClearHistory || nextTime <= 0) return;
     if (Date.now() - historyWriteAt.current < HISTORY_WRITE_INTERVAL_MS) return;
     historyWriteAt.current = Date.now();
@@ -1029,9 +1099,45 @@ function App() {
     flashOsd(<Zap size={16} />, `${strings.osdSpeed} ${next}x`);
   };
 
+  /** Writes a seek target to the element, clamped to the media. */
+  const applySeek = (target: number) => {
+    const video = videoRef.current;
+    if (!video) return;
+    const clamped = clamp(target, 0, video.duration || duration);
+    seekTarget.current = clamped;
+    video.currentTime = clamped;
+  };
+
+  /**
+   * Seeks, keeping one seek in flight at a time.
+   *
+   * A request that lands while the element is still seeking is held as the
+   * newest target instead of cancelling the seek in progress; `handleSeeked`
+   * hands it over. `advanceSeek` owns the rule and why it matters.
+   */
+  const seekTo = (target: number) => {
+    const video = videoRef.current;
+    if (!video) return;
+    const { state, step } = advanceSeek(seekQueue.current, {
+      type: "request",
+      target,
+      seeking: video.seeking,
+    });
+    seekQueue.current = state;
+    if (step.type === "apply") applySeek(step.target);
+  };
+
+  /** The seek in flight has landed: apply the newest target that waited. */
+  const handleSeeked = () => {
+    const { state, step } = advanceSeek(seekQueue.current, { type: "settled" });
+    seekQueue.current = state;
+    if (step.type === "apply") applySeek(step.target);
+  };
+
   const seekBy = (amount: number) => {
-    if (!videoRef.current) return;
-    videoRef.current.currentTime = Math.max(0, Math.min(videoRef.current.duration || duration, videoRef.current.currentTime + amount));
+    const video = videoRef.current;
+    if (!video) return;
+    seekTo(seekBase(seekQueue.current.pending, video.currentTime || 0) + amount);
   };
 
   const moveTrack = (direction: 1 | -1) => {
@@ -1045,7 +1151,7 @@ function App() {
 
     if (action.kind === "repeat") {
       if (videoRef.current) {
-        videoRef.current.currentTime = 0;
+        seekTo(0);
         void videoRef.current.play();
       }
       return;
@@ -1100,7 +1206,7 @@ function App() {
       if (!autoClearHistory) {
         const resume = resumePosition(history, activeId, video.duration);
         if (resume > 0) {
-          video.currentTime = resume;
+          seekTo(resume);
           setCurrentTime(resume);
         }
       }
@@ -1375,6 +1481,7 @@ function App() {
             onPlay={() => setIsPlaying(true)}
             onPause={() => setIsPlaying(false)}
             onTimeUpdate={handleTimeUpdate}
+            onSeeked={handleSeeked}
             onLoadedMetadata={() => void handleLoadedMetadata()}
             onEnded={handleEnded}
           />
@@ -1411,7 +1518,7 @@ function App() {
             value={Math.min(currentTime, duration || 0)}
             onChange={(event) => {
               const next = Number(event.target.value);
-              if (videoRef.current) videoRef.current.currentTime = next;
+              seekTo(next);
               setCurrentTime(next);
             }}
             style={{ "--progress": `${duration ? (currentTime / duration) * 100 : 0}%` } as CSSProperties}

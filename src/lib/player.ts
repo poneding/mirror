@@ -447,6 +447,63 @@ export function advanceSeekHold(
 }
 
 /**
+ * The seek that arrived while the element was already seeking, if any.
+ *
+ * `null` means nothing is waiting: either no request came in during the seek in
+ * flight, or the last one has already been handed over.
+ */
+export type SeekState = { pending: number | null };
+
+export type SeekEvent =
+  | { type: "request"; target: number; seeking: boolean }
+  | { type: "settled" };
+
+export type SeekStep = { type: "apply"; target: number } | { type: "idle" };
+
+/**
+ * Keeps at most one seek in flight, newest target wins.
+ *
+ * WebKit's macOS media backend hands a seek to AVPlayer, and AVPlayer cancels a
+ * seek that is still running when the next one arrives — Apple's own guidance is
+ * to wait for the one in progress before issuing another (QA1820). Hammering
+ * the arrow keys produced twenty seeks in a second: WebKit completed three,
+ * landed on a stale target and left the picture frozen while the clock ran on.
+ * The element is therefore given one seek at a time; a request that arrives
+ * while it is seeking replaces the pending target, and the newest one is applied
+ * when `settled` says the element is free.
+ *
+ * `seeking` rides the event rather than the state on purpose: the element, not
+ * this queue, is the truth about what is in flight, so a seek the element
+ * ignores cannot wedge the queue.
+ */
+export function advanceSeek(
+  state: SeekState,
+  event: SeekEvent,
+): { state: SeekState; step: SeekStep } {
+  switch (event.type) {
+    case "request":
+      if (event.seeking) return { state: { pending: event.target }, step: { type: "idle" } };
+      return { state: { pending: null }, step: { type: "apply", target: event.target } };
+    case "settled": {
+      const target = state.pending;
+      if (target === null) return { state, step: { type: "idle" } };
+      return { state: { pending: null }, step: { type: "apply", target } };
+    }
+  }
+}
+
+/**
+ * Where a relative seek starts.
+ *
+ * A queued target is not on the element yet, so a tap that follows it has to add
+ * to the queue — otherwise hammering the arrow key would collapse every tap into
+ * the one jump that was already waiting.
+ */
+export function seekBase(pending: number | null, currentTime: number): number {
+  return pending ?? currentTime;
+}
+
+/**
  * Maps a key event to a player command, applying the platform-specific
  * modifier layout:
  *
@@ -690,6 +747,31 @@ export function acceptsUpdate(remoteVersion: string, allowPreview: boolean): boo
 
 /** Max chrome opacity timer while playing. */
 export const CHROME_HIDE_DELAY_MS = 2800;
+
+/**
+ * How long a playing picture may go without presenting a frame before Mirror
+ * assumes WebKit has dropped it.
+ */
+export const PICTURE_STALL_MS = 2000;
+
+/** How often the picture watchdog looks at the frame heartbeat. */
+export const PICTURE_STALL_CHECK_MS = 500;
+
+/**
+ * Whether a picture that should be moving has stopped presenting frames.
+ *
+ * WebKit's macOS media backend can drop a seek while the clock runs on: the
+ * element reports `paused = false` and `currentTime` advances, but no frame is
+ * ever presented again. Measured on the live window, twenty-five arrow taps
+ * left one frame in five seconds; re-seeking to the position the element
+ * already claims brought the picture straight back. The element's own frame
+ * callbacks are the heartbeat the watchdog listens to, and `playing`/`hasVideo`
+ * keep it away from paused playback and audio-only items, where no frames are
+ * expected.
+ */
+export function pictureStalled(playing: boolean, hasVideo: boolean, sinceLastFrameMs: number): boolean {
+  return playing && hasVideo && sinceLastFrameMs >= PICTURE_STALL_MS;
+}
 
 /** How long the transient status indicator stays on screen. */
 export const OSD_DURATION_MS = 1000;
