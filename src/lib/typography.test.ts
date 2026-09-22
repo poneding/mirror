@@ -106,7 +106,6 @@ describe("fonts", () => {
       ".setting-label",
       ".setting-label strong",
       ".toggle-row",
-      ".setting-hint",
       ".shortcut-row",
       ".update-status",
       ".update-status strong",

@@ -124,6 +124,11 @@ The Makefile targets the actual development environment, verified:
   `:root`. Do not hardcode hex values in components.
 - Both light and dark themes must work; check `data-theme` selectors and the
   `prefers-color-scheme` block for `system`.
+- `--background` is a translucent wash, not a page colour: the selected tab and
+  the slider thumb's ring read it, so it stays translucent in every theme block.
+  Keep the `system` block's dark values identical to `[data-theme="dark"]` — a
+  value that lands in only one of them makes 深色 and 跟随系统 render
+  differently.
 - Icons come from `lucide-react` only. No emoji as UI icons.
 - Scrollbars are styled through `::-webkit-scrollbar` only. Setting the standard
   `scrollbar-color` / `scrollbar-width` properties makes Chromium ignore those
@@ -135,14 +140,27 @@ The Makefile targets the actual development environment, verified:
 - Keep frosted surfaces (`backdrop-filter`) on panels and overlays, never on the
   element that covers playing video: blurring the picture both looks muddy and
   costs frames.
-- All of them share one recipe — `--glass-blur`, `--glass-fill`,
-  `--glass-sheen` in `:root`, resolved against the per-theme primitives
-  (`--glass-strong`, `--glass-highlight`, `--glass-sheen-top`). `--glass-strong`
-  is a film over a heavily blurred, saturated picture, not a paint: near-opaque
+- Every glass surface is one recipe — `--glass-blur` and `--glass-fill` in
+  `:root`, resolved against the per-theme primitives (`--glass-strong`,
+  `--glass-sheen-top`). Glass draws **no border and no drop shadow**: the
+  `--glass-border`, `--glass-border-strong`, `--glass-sheen`, `--shadow` and
+  `--shadow-chip` tokens were removed deliberately, so a panel, dropdown,
+  dialog, toast, OSD, tooltip or bar that grows an outline or a shadow is a
+  regression, not a polish. The only elevation left is `--shadow-thumb` (a
+  slider thumb off its rail), `--shadow-logo` (the home logo) and
+  `--press-inset` (a press landing on a filled control). `--glass-strong` is a
+  film over a heavily blurred, saturated picture, not a paint: near-opaque
   values (it was `.9`) hide the blur and every panel, bar and overlay reads as
   flat white. Because that film is translucent, the muted ink is one zinc step
   stronger than the palette default (see the comment in `:root`) — secondary
   text sits on glass everywhere and has to stay legible over an unknown picture.
+- A button that used to carry a border now says `border: 0` explicitly
+  (`.combobox-trigger`, `.ghost-button`, `.update-button`); without it the UA
+  border comes back and the control reads as a box.
+- The shell chrome has no motion: the titlebar and the control bar appear and
+  disappear instantly (no transition on them), and panels do not slide in — the
+  `panel-in` / `panel-in-left` keyframes are gone. The feedback animations that
+  remain are the OSD, the dropdowns, the dialog, the toast and the name tooltip.
 - The control bar's own glass lives on `.player-chrome::before`, not on the bar.
   An element with `backdrop-filter` is the backdrop root for its descendants, so
   a filter on the bar left the speed dropdown filtering an empty backdrop: the
@@ -256,9 +274,10 @@ kept in step with the stylesheet by a test. The position is `--titlebar-height /
 2 - 2`: macOS centres the stock buttons 14pt down its own 28pt titlebar (their
 frame is `(7, 6, 14, 16)` in a 28pt view), and tao's inset puts that centre at
 `inset + 2` — measured on the live window, not derived. Left at the stock height
-the dots read as "a bit high" in a 36px bar, because they are. The fade is the
-bar's own clock (`--dur-slow`, `TITLEBAR_FADE_SECONDS` in `lib.rs`), so the dots
-leave and arrive with the bar instead of blinking out of it. Two details are
+the dots read as "a bit high" in a 36px bar, because they are. The fade runs on
+`--dur-slow` (`TITLEBAR_FADE_SECONDS` in `lib.rs`), so the dots ease out instead
+of blinking; the bar itself is instant now, which makes the dots the one part of
+the titlebar that animates. Two details are
 load-bearing. A hidden button is *hidden*, not transparent: a click at zero
 alpha still lands, and the pointer can be parked on one when the titlebar times
 out, so `alphaValue` alone would turn a stray click at the top-left into a
