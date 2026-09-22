@@ -1,6 +1,6 @@
 {
   "name": "mirror-player",
-  "version": "0.1.0-alpha.3",
+  "version": "0.1.0-alpha.5",
   "private": true,
   "type": "module",
   "scripts": {

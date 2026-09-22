@@ -1,6 +1,6 @@
 [package]
 name = "mirror"
-version = "0.1.0-alpha.3"
+version = "0.1.0-alpha.5"
 description = "A clean, offline video player"
 authors = ["Mirror"]
 edition = "2021"
