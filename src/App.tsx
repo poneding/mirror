@@ -733,6 +733,26 @@ function App() {
     };
   }, [activeId, activeItem, clientSize]);
 
+  /** The video size whose window fit waited for fullscreen to end. */
+  const deferredFit = useRef<{ width: number; height: number } | null>(null);
+
+  /**
+   * A fit owed by a video that loaded while the window was fullscreen.
+   *
+   * Fullscreen belongs to the screen, so `handleLoadedMetadata` does not resize
+   * the window there; the size waits until the window is not fullscreen. Doing
+   * it the moment the flag drops is what the user would have got had the video
+   * loaded a second later.
+   */
+  useEffect(() => {
+    if (isFullscreen) return;
+    const owed = deferredFit.current;
+    if (!owed) return;
+    deferredFit.current = null;
+    if (!isTauri()) return;
+    void invoke("resize_to_video", owed).catch(() => undefined);
+  }, [isFullscreen]);
+
   useEffect(() => {
     const handleFullscreen = () => {
       setIsFullscreen(Boolean(document.fullscreenElement));
@@ -1215,7 +1235,12 @@ function App() {
         : item));
     }
     if (isTauri() && video.videoWidth && video.videoHeight) {
-      await invoke("resize_to_video", { width: video.videoWidth, height: video.videoHeight }).catch(() => undefined);
+      // In fullscreen the window *is* the screen: resizing it there resized the
+      // webview inside the fullscreen window (macOS `setContentSize`), and the
+      // picture collapsed into the top-left corner at a quarter of its size.
+      // The fit is owed, not skipped — it waits for the way out.
+      if (isFullscreen) deferredFit.current = { width: video.videoWidth, height: video.videoHeight };
+      else await invoke("resize_to_video", { width: video.videoWidth, height: video.videoHeight }).catch(() => undefined);
     }
   };
 
