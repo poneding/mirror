@@ -331,19 +331,23 @@ input:focus-visible {
   justify-content: space-between;
   padding: 0 10px;
   color: var(--foreground);
+  /* No edge of its own: no 1px sheen along the top, no hairline under it.
+     Both sit where the eye looks for a window frame — the sheen lands on the
+     window's own top edge and the hairline cuts the bar off from the film —
+     so the bar reads as a border rather than as glass. `--glass-fill` still
+     lightens the top, which is the material without a drawn outline; every
+     other glass surface keeps the shared sheen. */
   background: var(--glass-fill);
-  box-shadow: var(--glass-sheen), inset 0 -1px 0 var(--glass-border);
   backdrop-filter: var(--glass-blur);
   transition: opacity var(--dur-slow) var(--ease), transform var(--dur-slow) var(--ease);
   -webkit-app-region: drag;
 }
 
-/* Home is one surface already, so the bar adds nothing: no tint, no blur, no
-   edge. Transparent here also means the bar cannot double-darken the page
-   behind it. */
+/* Home is one surface already, so the bar adds nothing: no tint, no blur.
+   Transparent here also means the bar cannot double-darken the page behind
+   it. */
 .mirror-shell:not(.has-video) .titlebar {
   background: transparent;
-  box-shadow: none;
   backdrop-filter: none;
 }
 
