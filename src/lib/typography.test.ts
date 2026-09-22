@@ -107,6 +107,8 @@ describe("fonts", () => {
       ".setting-label strong",
       ".toggle-row",
       ".shortcut-row",
+      ".about-row",
+      ".about-row strong",
       ".update-status",
       ".update-status strong",
       ".playlist-name strong",

@@ -161,6 +161,14 @@ The Makefile targets the actual development environment, verified:
   disappear instantly (no transition on them), and panels do not slide in — the
   `panel-in` / `panel-in-left` keyframes are gone. The feedback animations that
   remain are the OSD, the dropdowns, the dialog, the toast and the name tooltip.
+- The settings panel has one row template and one rhythm. `.setting-row`,
+  `.setting-label`, `.toggle-row`, `.shortcut-row` and `.about-row` all take
+  the same template, and `.setting-section > * + *` owns the spacing between
+  them; a setting that owns the control under it (the seek slider, the
+  playback-mode list) is a block and takes a wider step. The five sections had
+  drifted into five rhythms — 6, 8 and 16px, mixed inside 播放 — so a section
+  that spaces or sizes its own rows is a regression, and
+  `src/lib/settings-rows.test.ts` fails on one.
 - The control bar's own glass lives on `.player-chrome::before`, not on the bar.
   An element with `backdrop-filter` is the backdrop root for its descendants, so
   a filter on the bar left the speed dropdown filtering an empty backdrop: the

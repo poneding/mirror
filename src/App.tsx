@@ -1742,8 +1742,10 @@ function App() {
                   {settingsSection === "playback" && (
                     <SettingSection icon={<SlidersHorizontal size={14} />} title={strings.playback}>
                       <div className="range-setting"><div className="setting-label"><span>{strings.seekStep}</span><strong className="num">{seekStep} {strings.seconds}</strong></div><input type="range" min="5" max="60" step="5" value={seekStep} onChange={(event) => setSeekStep(Number(event.target.value))} style={{ "--progress": `${((seekStep - 5) / 55) * 100}%` } as CSSProperties} /></div>
-                      <div className="setting-label"><span>{strings.playbackMode}</span></div>
-                      <div className="mode-list">{playbackOptions.map(({ key, label, icon: Icon }) => <button key={key} className={playbackMode === key ? "selected" : ""} onClick={() => setPlaybackMode(key)}><span><Icon size={15} />{label}</span>{playbackMode === key && <Zap size={13} />}</button>)}</div>
+                      <div className="setting-group">
+                        <div className="setting-label"><span>{strings.playbackMode}</span></div>
+                        <div className="mode-list">{playbackOptions.map(({ key, label, icon: Icon }) => <button key={key} className={playbackMode === key ? "selected" : ""} onClick={() => setPlaybackMode(key)}><span><Icon size={14} />{label}</span>{playbackMode === key && <Zap size={13} />}</button>)}</div>
+                      </div>
                       <ToggleRow label={strings.clearHistory} checked={autoClearHistory} onChange={setAutoClearHistory} />
                     </SettingSection>
                   )}

@@ -99,8 +99,11 @@
   --radius-xl: 18px;
   --radius-full: 999px;
 
-  /* The vertical rhythm of a panel: a row in a long list, a row in a section,
-     and a row that owns a control. No panel margin uses anything else. */
+  /* The vertical rhythm of a panel: inside a block (a label and the control it
+     owns, a heading and its text), between the rows of a section, and the wider
+     step that sets a block — the section heading, a setting with its own
+     control — apart from the rows around it. No panel margin uses anything
+     else. */
   --gap-list: 6px;
   --gap-row: 8px;
   --gap-control: 16px;
@@ -1320,11 +1323,9 @@ input {
   gap: 20px;
 }
 
-/* One section is shown at a time, so the heading is the only separator needed. */
-.setting-section {
-  padding: 0;
-}
-
+/* One section is shown at a time, so the heading is the only separator needed.
+   It opens the section on the same left edge as every row under it, one block
+   step above the first of them. */
 .section-heading {
   display: flex;
   align-items: center;
@@ -1373,18 +1374,56 @@ input {
   cursor: default;
 }
 
-/* label on the left, value control on the right */
-.setting-row {
+/* ---------- settings rows ---------- */
+
+/* One template for everything a section lists — a setting, a toggle, a
+   shortcut, a value — so the five sections read as one list instead of five
+   takes on the same row. The label sits left, the control or value right. */
+.setting-row,
+.setting-label,
+.toggle-row,
+.shortcut-row,
+.about-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin: var(--gap-row) 0;
-}
-
-.setting-row-label {
+  margin: 0;
   color: var(--muted-foreground);
   font-size: 11px;
+}
+
+/* The label half of a row, wherever it appears. */
+.setting-row-label,
+.toggle-row>span,
+.shortcut-row>span,
+.about-row>span {
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
+
+/* The rhythm of a section lives in one place. Every row is one step from the
+   last; a setting that owns the control under it — the seek slider, the
+   playback-mode list — is a block, set a wider step clear of the rows around
+   it so its label reads as belonging to what is under it, not to what is
+   above. */
+.setting-section>*+* {
+  margin-top: var(--gap-row);
+}
+
+.setting-section>.range-setting,
+.setting-section>.setting-group,
+.setting-section>.range-setting+*,
+.setting-section>.setting-group+* {
+  margin-top: var(--gap-control);
+}
+
+/* Inside a block, the label hugs its control. */
+.range-setting,
+.setting-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-list);
 }
 
 /* Font choices are long words a user is trying to recognize, so the value
@@ -1395,39 +1434,18 @@ input {
   flex: 0 1 190px;
 }
 
-.about-row {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  margin: var(--gap-row) 0;
-  color: var(--muted-foreground);
-  font-size: 11px;
-}
-
+/* The value half of a row: the answer to the label, one size up and in the
+   foreground ink. */
+.setting-label strong,
 .about-row strong {
   color: var(--foreground);
+  font-size: 12px;
   font-weight: 500;
 }
 
 .about-repo {
   overflow-wrap: anywhere;
   text-align: right;
-}
-
-.setting-label {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin: var(--gap-control) 0 var(--gap-list);
-  color: var(--muted-foreground);
-  font-size: 11px;
-}
-
-.setting-label strong {
-  color: var(--foreground);
-  font-size: 12px;
-  font-weight: 500;
 }
 
 /* ---------- combobox ---------- */
@@ -1632,27 +1650,29 @@ input {
   }
 }
 
+/* The block's own gap owns the space between the label and the slider. */
 .range-setting input {
   width: 100%;
-  margin: 3px 0 5px;
 }
 
+/* The same choice-row recipe as the settings rail: a list of choices is a list
+   of choices, whether it switches section or sets the playback mode. */
 .mode-list {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
 }
 
 .mode-list button {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 9px 10px;
+  padding: 7px 8px;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   color: var(--muted-foreground);
   background: transparent;
-  font-size: 12px;
+  font-size: 11px;
   text-align: left;
   transition: color var(--dur-slow) var(--ease), background var(--dur-slow) var(--ease);
 }
@@ -1660,7 +1680,7 @@ input {
 .mode-list button span {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
 }
 
 .mode-list button:hover {
@@ -1677,14 +1697,8 @@ input {
   color: var(--foreground);
 }
 
+/* The whole row is the switch's hit area. */
 .toggle-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin: var(--gap-control) 0;
-  color: var(--muted-foreground);
-  font-size: 11px;
   cursor: pointer;
 }
 
@@ -1735,26 +1749,10 @@ input {
 }
 
 
-.shortcut-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  margin: var(--gap-list) 0;
-  color: var(--muted-foreground);
-  font-size: 11px;
-}
-
 .shortcut-row span {
   display: flex;
   flex-direction: column;
   gap: 3px;
-}
-
-.shortcut-row small {
-  color: var(--muted-foreground);
-  font-size: 10px;
-  opacity: .8;
 }
 
 .shortcut-row>div {
@@ -1832,8 +1830,7 @@ kbd {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 8px;
-  margin: 12px 0 4px;
+  gap: var(--gap-row);
 }
 
 .update-button {
