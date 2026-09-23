@@ -280,11 +280,13 @@ video did not move at all. Snapping to a whole *device* pixel does **not** work:
 a CSS pixel, which is invisible, and the rounding never pushes it past the
 client's edge.
 
-**Window controls**: the window is undecorated (`decorations: false`), so the
-minimise/maximise/close buttons are ours to draw. Windows/Linux get all three;
-macOS keeps minimise + close. The glyph follows the real window state, synced
-through `onResized` so it stays correct when the window is maximised by another
-route (double-click, OS shortcut).
+**Window controls**: on Windows and Linux the window is undecorated
+(`decorations: false`), so the minimise/maximise/close buttons are ours to draw,
+all three. macOS draws none of them: `tauri.macos.conf.json` keeps the native
+decorations under an `Overlay` title bar, so the system traffic lights sit over
+the titlebar and `App.tsx` leaves that corner empty. The maximise glyph follows
+the real window state, synced through `onResized` so it stays correct when the
+window is maximised by another route (double-click, OS shortcut).
 
 **macOS traffic lights**: macOS is the one platform where the window is not
 undecorated — `tauri.macos.conf.json` sets `titleBarStyle: "Overlay"` with
