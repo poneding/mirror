@@ -1359,10 +1359,12 @@ function App() {
   const removeItem = (id: string) => {
     setItems((current) => current.filter((item) => item.id !== id));
     if (id === activeId) {
-      // The stage passes to the first remaining item, paused: removing a row
-      // is not a request to play the one after it.
+      // The stage passes to the first remaining item in the state the removed
+      // one left it: a paused picture stays paused — removing a row is not a
+      // request to play the one after it — and a playing one carries on.
       const fallback = items.find((item) => item.id !== id);
-      pausedLoadRef.current = fallback?.id ?? null;
+      const wasPlaying = videoRef.current !== null && !videoRef.current.paused;
+      pausedLoadRef.current = wasPlaying ? null : fallback?.id ?? null;
       setActiveId(fallback?.id ?? null);
     }
   };

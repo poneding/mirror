@@ -395,8 +395,9 @@ resuming is the play button, `Space`, or the media keys.
 **Autoplay**: a video restored from storage loads paused — opening Mirror is not
 a request to play, so the user starts it. Adding a file, picking a playlist or
 history row, or moving to another track still plays that item. Removing the
-active row hands the stage to the next one *paused*: deleting is not a request
-to play either. `resolveAutoplay` (`lib/player.ts`) owns this rule.
+active row hands the stage to the next one in the state it left: a paused
+picture stays paused — deleting is not a request to play either — and a playing
+one carries on. `resolveAutoplay` (`lib/player.ts`) owns this rule.
 
 **Opening files and folders**: one control carries both ways in, split in two — the
 label half opens video files straight away (one or many, through the platform

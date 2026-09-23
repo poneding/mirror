@@ -259,7 +259,7 @@ export function resolveActiveId(items: MediaItem[], activeId: string | null): st
  * `pausedId` names the one item whose next load stays paused. It is the item
  * that was active when the app opened — launching Mirror is not a request to
  * play — and the neighbour that takes the stage when the active item is
- * removed, since deleting a row is not one either. Every other load comes
+ * removed while paused, since deleting a row is not one either. Every other load comes
  * from something the user did — adding a file, picking a row, moving to the
  * next track — so it plays. The exception is spent once another item loads,
  * which is why the returned `pausedId` is kept for the next call.
