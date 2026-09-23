@@ -594,6 +594,16 @@ mod tests {
         assert!(height >= MIN_HEIGHT);
     }
 
+    /// 5120x1440 at the target width is 1120x315, under the 360 minimum: the
+    /// window grows to 1280x360, same ratio, never one axis alone. The
+    /// 1920x1080 case cannot catch a broken growth step — its growth is 1.
+    #[test]
+    fn grows_uniformly_to_reach_a_minimum() {
+        let (width, height) = fitted_size(5120.0, 1440.0).unwrap();
+        assert!((width - 1280.0).abs() < 0.1, "width was {width}");
+        assert!((height - 360.0).abs() < 0.1, "height was {height}");
+    }
+
     #[test]
     fn rejects_unusable_dimensions() {
         assert!(fitted_size(0.0, 1080.0).is_none());

@@ -1044,6 +1044,15 @@ describe("fitWindowToVideo", () => {
     }
   });
 
+  it("grows uniformly to reach a minimum, as far as the maximums allow", () => {
+    // 5120x1440 at the target width is 1120x315, under the 360 minimum: the
+    // window grows to 1280x360, same ratio, and never one axis alone. The
+    // 1920x1080 case cannot catch this — its growth is exactly 1.
+    const size = fitWindowToVideo(5120, 1440)!;
+    expect(size.width).toBeCloseTo(1280, 1);
+    expect(size.height).toBeCloseTo(360, 1);
+  });
+
   it("honours the minimums when they fit", () => {
     const size = fitWindowToVideo(1920, 1080)!;
     expect(size.width).toBeGreaterThanOrEqual(WINDOW_FIT.minWidth);
