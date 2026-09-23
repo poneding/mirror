@@ -46,6 +46,7 @@ import {
   CHROME_HIDE_DELAY_MS,
   FALLBACK_VERSION,
   HISTORY_WRITE_INTERVAL_MS,
+  MEDIA_SCHEME,
   HOLD_SPEED_DELAY_MS,
   OSD_DURATION_MS,
   PICTURE_STALL_CHECK_MS,
@@ -1024,7 +1025,7 @@ function App() {
           id: `${path}-${Math.random()}`,
           name: fileNameFromPath(path),
           path,
-          source: convertFileSrc(path),
+          source: convertFileSrc(path, MEDIA_SCHEME),
           duration: 0,
         }));
       if (!created.length) {

@@ -66,6 +66,7 @@ import {
   stepSpeed,
   tipShift,
   tooltipPlacement,
+  upgradeAssetSource,
 } from "./player";
 
 /** In-memory stand-in for localStorage. */
@@ -78,7 +79,7 @@ function item(id: string, overrides: Partial<MediaItem> = {}): MediaItem {
     id,
     name: `${id}.mp4`,
     path: `/videos/${id}.mp4`,
-    source: `asset://localhost/${id}.mp4`,
+    source: `media://localhost/${id}.mp4`,
     duration: 10,
     ...overrides,
   };
@@ -264,6 +265,28 @@ describe("clamp", () => {
   });
 });
 
+describe("upgradeAssetSource", () => {
+  it("moves the macOS and Linux asset origin", () => {
+    expect(upgradeAssetSource("asset://localhost/%2FUsers%2Fa.mp4")).toBe("media://localhost/%2FUsers%2Fa.mp4");
+  });
+
+  it("moves the Windows asset origin, keeping its scheme", () => {
+    expect(upgradeAssetSource("http://asset.localhost/C%3A%5Ca.mp4")).toBe("http://media.localhost/C%3A%5Ca.mp4");
+    expect(upgradeAssetSource("https://asset.localhost/C%3A%5Ca.mp4")).toBe("https://media.localhost/C%3A%5Ca.mp4");
+  });
+
+  it("leaves every other source alone", () => {
+    for (const source of [
+      "media://localhost/%2Fa.mp4",
+      "blob:http://localhost/1",
+      "http://example.com/asset://localhost/a.mp4",
+      "asset://elsewhere/a.mp4",
+    ]) {
+      expect(upgradeAssetSource(source)).toBe(source);
+    }
+  });
+});
+
 describe("parseStoredPlaylist", () => {
   it("returns an empty list for empty or malformed input", () => {
     expect(parseStoredPlaylist(null)).toEqual([]);
@@ -287,11 +310,17 @@ describe("parseStoredPlaylist", () => {
     expect(restored.map((entry) => entry.id)).toEqual(["keep"]);
   });
 
+  // A playlist saved before the `media` protocol still plays after the upgrade.
+  it("moves asset sources onto the media protocol", () => {
+    const raw = JSON.stringify([item("old", { source: "asset://localhost/%2Fvideos%2Fold.mp4" })]);
+    expect(parseStoredPlaylist(raw)[0].source).toBe("media://localhost/%2Fvideos%2Fold.mp4");
+  });
+
   it("drops structurally invalid entries", () => {
     const raw = JSON.stringify([
       item("good"),
       { id: "missing-source", name: "x", path: "x" },
-      { name: "no-id", source: "asset://x" },
+      { name: "no-id", source: "media://x" },
       null,
     ]);
     expect(parseStoredPlaylist(raw).map((entry) => entry.id)).toEqual(["good"]);
@@ -854,7 +883,7 @@ describe("watch history", () => {
     id,
     name: `${id}.mp4`,
     path: `/videos/${id}.mp4`,
-    source: `asset://localhost/${id}.mp4`,
+    source: `media://localhost/${id}.mp4`,
     position: 30,
     duration: 100,
     updatedAt: 1,
@@ -864,6 +893,12 @@ describe("watch history", () => {
   it("parses a stored array", () => {
     const list = parseHistory(JSON.stringify([entry("a"), entry("b")]));
     expect(list.map((item) => item.id)).toEqual(["a", "b"]);
+  });
+
+  // An entry saved before the `media` protocol still resumes after the upgrade.
+  it("moves asset sources onto the media protocol", () => {
+    const saved = JSON.stringify([entry("a", { source: "asset://localhost/%2Fvideos%2Fa.mp4" })]);
+    expect(parseHistory(saved)[0].source).toBe("media://localhost/%2Fvideos%2Fa.mp4");
   });
 
   // The earlier format kept only one entry; an upgrade must not lose it.
@@ -931,7 +966,7 @@ describe("watch history", () => {
   it("converts a history entry back into a playable item", () => {
     const item = historyToMediaItem(entry("a"));
     expect(item.id).toBe("a");
-    expect(item.source).toContain("asset://");
+    expect(item.source).toContain("media://");
     expect(item).not.toHaveProperty("position");
   });
 });

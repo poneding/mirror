@@ -18,6 +18,7 @@ Two processes, one window:
 ```
 src-tauri/                     Rust: native shell
   src/lib.rs                   Tauri commands + window setup (tested)
+  src/media.rs                 The `media://` protocol video is read through (tested)
   src/main.rs                  Entry point, delegates to mirror_lib::run()
   tauri.conf.json              Window, bundle targets, updater endpoint + public key
   capabilities/default.json    Permissions (core, dialog, updater)
@@ -38,6 +39,15 @@ The Rust layer only does what the WebView cannot: window sizing, pinning,
 fullscreen, native file dialogs, and OS blur (Acrylic/Vibrancy via
 `window-vibrancy`). Video decoding is delegated to the system WebView, so there
 is no bundled decoder.
+
+Video reaches the WebView through Mirror's own `media://` protocol
+(`src-tauri/src/media.rs`), not Tauri's `asset://`. The asset protocol answers
+every range with at most 1000 KiB; WebKit reads an MP4's `moov` boxes whole and
+does not come back for the rest of one cut short, so a long film (whose `ctts`
+passes 1 MB at about two hours) lost its video track and played as audio over a
+black picture. `media://` answers a range with an end in full and chunks only a
+range left open. **Do not go back to `asset://` or cap closed ranges** —
+`convertFileSrc` takes `MEDIA_SCHEME` as its second argument.
 
 **Keep `lib/player.ts` free of React, DOM, and Tauri imports.** It must stay
 pure and directly unit-testable. If logic needs a side effect, put the effect in
@@ -539,8 +549,11 @@ Two rules matter:
    a number with `Number(store.getItem(key))` silently forces the minimum. This
    was a real bug (volume defaulted to 0). Use `getInitialNumber`.
 2. **`blob:` sources cannot survive a reload.** The browser preview uses blob
-   URLs; the packaged app uses `asset://` URLs which persist. `parseStoredPlaylist`
+   URLs; the packaged app uses `media://` URLs which persist. `parseStoredPlaylist`
    drops blob entries so a restart never shows dead rows. Verified by tests.
+   Sources saved under the retired `asset://` protocol are moved onto `media://`
+   as they are read (`upgradeAssetSource`), so old playlists and history still
+   play.
 
 ## Verification expectations
 

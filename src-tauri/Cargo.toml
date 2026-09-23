@@ -14,13 +14,15 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2.4", features = [] }
 
 [dependencies]
-tauri = { version = "2.8", features = ["macos-private-api", "protocol-asset"] }
+tauri = { version = "2.8", features = ["macos-private-api"] }
 tauri-plugin-dialog = "2.4"
 # The About section's repository link is an ordinary `<a target="_blank">`; the
 # plugin is what turns that click into the system browser instead of a new
 # webview, and `opener:default` in the capability is what lets it.
 tauri-plugin-opener = "2.5"
 window-vibrancy = "0.6"
+# The `media` protocol decodes the file path out of its URL (see `media.rs`).
+percent-encoding = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 fontdb = "0.24.0"

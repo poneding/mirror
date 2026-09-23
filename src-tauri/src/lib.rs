@@ -8,6 +8,8 @@ use tauri::{LogicalSize, Manager, Size, Window};
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 use std::sync::atomic::{AtomicBool, Ordering};
 
+mod media;
+
 /// Whether Mirror dropped a maximized window to enter fullscreen, so the way out
 /// knows to put the maximized window back. Mirror has one window.
 #[cfg(target_os = "windows")]
@@ -451,6 +453,14 @@ pub fn run() {
     let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
 
     builder
+        // Video is read through Mirror's own protocol rather than Tauri's
+        // `asset`, which cuts every reply short; `media.rs` has the why. Each
+        // request reads from disk, so it runs off the main thread.
+        .register_asynchronous_uri_scheme_protocol(media::SCHEME, |_ctx, request, responder| {
+            tauri::async_runtime::spawn_blocking(move || {
+                responder.respond(media::respond(&request))
+            });
+        })
         .setup(|app| {
             if let Some(window) = app.get_webview_window("main") {
                 apply_glass(&window);

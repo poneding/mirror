@@ -16,6 +16,26 @@ export type MediaItem = {
   height?: number;
 };
 
+/**
+ * The URI scheme the desktop app reads video through, `SCHEME` in
+ * `src-tauri/src/media.rs`. Tauri's `asset` protocol cut every reply at
+ * 1000 KiB, which cost long MP4s their video track; that file has the why.
+ */
+export const MEDIA_SCHEME = "media";
+
+/**
+ * Moves a source saved under the retired `asset` protocol onto `media`.
+ *
+ * `convertFileSrc` writes the same encoded path under either scheme, and only
+ * the origin differs: `asset://localhost/` on macOS and Linux,
+ * `http(s)://asset.localhost/` on Windows. Anything else is left alone.
+ */
+export function upgradeAssetSource(source: string): string {
+  return source
+    .replace(/^asset:\/\/localhost\//, `${MEDIA_SCHEME}://localhost/`)
+    .replace(/^(https?):\/\/asset\.localhost\//, `$1://${MEDIA_SCHEME}.localhost/`);
+}
+
 export type Theme = "dark" | "light" | "system";
 export type Language = "zh" | "en";
 export type PlaybackMode = "pause" | "playlist" | "single" | "list";
@@ -167,15 +187,17 @@ export function parseStoredPlaylist(raw: string | null): MediaItem[] {
   try {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return (parsed as MediaItem[]).filter(
-      (item) =>
-        item &&
-        typeof item.id === "string" &&
-        typeof item.name === "string" &&
-        typeof item.source === "string" &&
-        item.source.length > 0 &&
-        !item.source.startsWith("blob:"),
-    );
+    return (parsed as MediaItem[])
+      .filter(
+        (item) =>
+          item &&
+          typeof item.id === "string" &&
+          typeof item.name === "string" &&
+          typeof item.source === "string" &&
+          item.source.length > 0 &&
+          !item.source.startsWith("blob:"),
+      )
+      .map((item) => ({ ...item, source: upgradeAssetSource(item.source) }));
   } catch {
     return [];
   }
@@ -640,7 +662,7 @@ function toHistoryEntry(value: unknown): HistoryEntry | null {
     id: entry.id,
     name: typeof entry.name === "string" ? entry.name : "",
     path: typeof entry.path === "string" ? entry.path : "",
-    source: typeof entry.source === "string" ? entry.source : "",
+    source: typeof entry.source === "string" ? upgradeAssetSource(entry.source) : "",
     position: entry.position,
     duration: typeof entry.duration === "number" && Number.isFinite(entry.duration) ? entry.duration : 0,
     updatedAt: typeof entry.updatedAt === "number" ? entry.updatedAt : 0,
