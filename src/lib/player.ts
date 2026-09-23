@@ -683,11 +683,15 @@ function toHistoryEntry(value: unknown): HistoryEntry | null {
   const entry = value as Partial<HistoryEntry>;
   if (typeof entry.id !== "string" || typeof entry.position !== "number") return null;
   if (!Number.isFinite(entry.position) || entry.position < 0) return null;
+  const source = typeof entry.source === "string" ? entry.source : "";
+  // A blob: URL dies with the page that made it, as in the stored playlist: a
+  // history row pointing at one can neither play nor be re-added.
+  if (source.startsWith("blob:")) return null;
   return {
     id: entry.id,
     name: typeof entry.name === "string" ? entry.name : "",
     path: typeof entry.path === "string" ? entry.path : "",
-    source: typeof entry.source === "string" ? upgradeAssetSource(entry.source) : "",
+    source: upgradeAssetSource(source),
     position: entry.position,
     duration: typeof entry.duration === "number" && Number.isFinite(entry.duration) ? entry.duration : 0,
     updatedAt: typeof entry.updatedAt === "number" ? entry.updatedAt : 0,

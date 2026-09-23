@@ -943,6 +943,11 @@ describe("watch history", () => {
     expect(parseHistory(JSON.stringify([{ id: "a", position: -5 }, { position: 3 }, null]))).toEqual([]);
   });
 
+  it("drops entries whose source died with the page, like the playlist does", () => {
+    const list = parseHistory(JSON.stringify([entry("a", { source: "blob:http://localhost/x" }), entry("b")]));
+    expect(list.map((item) => item.id)).toEqual(["b"]);
+  });
+
   it("caps the list at the limit", () => {
     const many = Array.from({ length: HISTORY_LIMIT + 20 }, (_, i) => entry(`id-${i}`));
     expect(parseHistory(JSON.stringify(many))).toHaveLength(HISTORY_LIMIT);
