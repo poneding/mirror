@@ -59,10 +59,27 @@ fn fitted_size(video_width: f64, video_height: f64) -> Option<(f64, f64)> {
     Some((width, height))
 }
 
+/// Whether a window in this state keeps its size when a video loads.
+///
+/// Fitting is for a window the user has not shaped. A maximized or fullscreen
+/// window is one they have, and tao's `set_inner_size` tears it down: on
+/// Windows it clears the maximize and applies the fitted size even to a
+/// borderless fullscreen window, so advancing the playlist shrank the picture
+/// to 1120px while the app still believed it was fullscreen.
+fn keeps_user_shape(fullscreen: bool, maximized: bool) -> bool {
+    fullscreen || maximized
+}
+
 #[tauri::command]
 fn resize_to_video(window: Window, width: f64, height: f64) -> Result<(), String> {
     let (target_width, target_height) =
         fitted_size(width, height).ok_or("Video dimensions must be positive numbers")?;
+
+    let fullscreen = window.is_fullscreen().map_err(|error| error.to_string())?;
+    let maximized = window.is_maximized().map_err(|error| error.to_string())?;
+    if keeps_user_shape(fullscreen, maximized) {
+        return Ok(());
+    }
 
     window
         .set_size(Size::Logical(LogicalSize::new(target_width, target_height)))
@@ -92,9 +109,7 @@ fn set_window_fullscreen(window: Window, fullscreen: bool) -> Result<(), String>
         // Maximize before tao restores its saved placement: that restore puts
         // the normal rect back first and maximizes on top of it, which is one
         // visible frame of a small window.
-        window
-            .maximize()
-            .map_err(|error| error.to_string())?;
+        window.maximize().map_err(|error| error.to_string())?;
     }
 
     window
@@ -106,12 +121,13 @@ fn set_window_fullscreen(window: Window, fullscreen: bool) -> Result<(), String>
         // Fullscreen first, so tao saves the maximized placement as the one to
         // come back to. Dropping the maximize afterwards only needs the
         // geometry re-applied, which is the one thing tao could not do itself.
-        window
-            .unmaximize()
-            .map_err(|error| error.to_string())?;
+        window.unmaximize().map_err(|error| error.to_string())?;
         UNMAXIMIZED_FOR_FULLSCREEN.store(true, Ordering::SeqCst);
 
-        if let Some(monitor) = window.current_monitor().map_err(|error| error.to_string())? {
+        if let Some(monitor) = window
+            .current_monitor()
+            .map_err(|error| error.to_string())?
+        {
             window
                 .set_position(*monitor.position())
                 .and_then(|_| window.set_size(*monitor.size()))
@@ -271,7 +287,10 @@ fn font_lists(faces: impl IntoIterator<Item = (String, bool)>) -> SystemFonts {
     }
     families.sort_by_key(|name| name.to_lowercase());
     monospace.sort_by_key(|name| name.to_lowercase());
-    SystemFonts { families, monospace }
+    SystemFonts {
+        families,
+        monospace,
+    }
 }
 
 /// Enumerates the fonts the OS has installed. `fontdb` only reads the name and
@@ -562,6 +581,15 @@ mod tests {
         assert!(fitted_size(-1920.0, 1080.0).is_none());
         assert!(fitted_size(f64::NAN, 1080.0).is_none());
         assert!(fitted_size(1920.0, f64::INFINITY).is_none());
+    }
+
+    /// A window the user maximized or made fullscreen is not refitted.
+    #[test]
+    fn keeps_a_maximized_or_fullscreen_window_as_it_is() {
+        assert!(keeps_user_shape(true, false));
+        assert!(keeps_user_shape(false, true));
+        assert!(keeps_user_shape(true, true));
+        assert!(!keeps_user_shape(false, false));
     }
 
     /// The frontend mirrors this function; keep both in step on a known case.
