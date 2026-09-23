@@ -482,8 +482,8 @@ input {
   color: var(--muted-foreground);
 }
 
-.icon-button:hover,
-.control-button:hover {
+.icon-button:hover:not(:disabled),
+.control-button:hover:not(:disabled) {
   color: var(--foreground);
   background: var(--glass-hover);
 }
