@@ -139,7 +139,13 @@ export function getInitialString(store: KeyValueStore, key: string): string {
 export function resolveFontStack(chosen: string, fallback: string): string {
   const family = chosen.trim();
   if (!family) return fallback;
-  const escaped = family.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  // A control character — a newline from a malformed name table — is a bad
+  // string token in CSS and drops the whole declaration; as a hex escape it
+  // is just a character in the name.
+  const escaped = Array.from(family.replace(/\\/g, "\\\\").replace(/"/g, '\\"'), (char) => {
+    const code = char.charCodeAt(0);
+    return code < 0x20 || code === 0x7f ? `\\${code.toString(16)} ` : char;
+  }).join("");
   return `"${escaped}", ${fallback}`;
 }
 

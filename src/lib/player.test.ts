@@ -213,6 +213,10 @@ describe("font choices", () => {
     expect(resolveFontStack('a"b\\c', DEFAULT_MONO_STACK)).toBe(`"a\\"b\\\\c", ${DEFAULT_MONO_STACK}`);
   });
 
+  it("escapes control characters, which would otherwise void the declaration", () => {
+    expect(resolveFontStack("a\nb\tc", DEFAULT_MONO_STACK)).toBe(`"a\\a b\\9 c", ${DEFAULT_MONO_STACK}`);
+  });
+
   it("keeps a stored choice the system still has", () => {
     expect(resolveStoredFont("Cascadia Code", ["Arial", "Cascadia Code"])).toBe("Cascadia Code");
   });
