@@ -133,6 +133,21 @@ The Makefile targets the actual development environment, verified:
   (already granted) is what allows the call. Without the permission the plugin
   still calls `preventDefault`, so the click does nothing at all — no error, no
   tab.
+- The page runs under a strict CSP (`app > security > csp`). The native
+  `media://` handler reads files from any drive, so the policy restricts script
+  sources and direct connections; it is defense in depth, not a file-access
+  sandbox. It allows the app's own scripts and styles, IPC, images (`data:`
+  included) and media from `media:` / `http(s)://media.localhost`. The retired
+  asset protocol must not be re-enabled. The update check needs
+  no `connect-src` entry because the updater plugin fetches from Rust. A new
+  kind of resource (a font file, a worker, a remote image) needs its directive
+  added, and the failure is a silent CSP violation in the console. Tauri
+  attaches it to the embedded assets it serves (`http://tauri.localhost`); on
+  desktop `tauri dev` loads the dev server directly, so the policy is not in
+  force there. Check it on a built app — `npx tauri build --debug --no-bundle`
+  is enough. Probe it from the page, not from a CDP `Runtime.evaluate`: code
+  the debugger evaluates is exempt from the `eval` check, so an `eval` there
+  succeeds even under this policy; a string `setTimeout` is refused.
 
 **CSS**
 - Use the shadcn default (neutral) palette via CSS variables defined in
