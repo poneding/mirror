@@ -473,29 +473,38 @@ function App() {
    * Checks can overlap — the launch check is still out when the user clicks
    * 检查更新, or flips the preview preference — and whichever answered last
    * used to write the status, so a quiet launch check could blank the dialog
-   * the manual one had just filled. Only the latest check may report.
+   * the manual one had just filled. Only the latest check may report — and a
+   * check that supersedes one the user asked for answers the user in its
+   * place: 开启并重新检查 turns the preference on, which starts the automatic
+   * check as well, and that one must not report "nothing found" as silence
+   * into the dialog the user is looking at.
    */
   const updateCheckSeq = useRef(0);
+  const reportingCheck = useRef(false);
   const runUpdateCheck = useCallback(async (manual: boolean, allowPreview: boolean) => {
     if (!isTauri()) return;
     const seq = ++updateCheckSeq.current;
+    const reports = manual || reportingCheck.current;
+    reportingCheck.current = reports;
     setUpdateStatus("checking");
     setUpdateError("");
     if (manual) setUpdateDialogOpen(true);
     try {
       const found = await check();
       if (seq !== updateCheckSeq.current) return;
+      reportingCheck.current = false;
       const offered = found !== null && acceptsUpdate(found.version, allowPreview);
       setAvailable(offered ? found : null);
       setBlockedPreview(found !== null && !offered ? found.version : null);
-      setUpdateStatus(found === null ? (manual ? "current" : "idle") : offered ? "idle" : "preview");
+      setUpdateStatus(found === null ? (reports ? "current" : "idle") : offered ? "idle" : "preview");
       // An update worth acting on is worth interrupting for; a check nobody
       // asked for says nothing in any other case.
-      if (offered && !manual) setUpdateDialogOpen(true);
+      if (offered && !reports) setUpdateDialogOpen(true);
     } catch (error) {
       if (seq !== updateCheckSeq.current) return;
+      reportingCheck.current = false;
       setUpdateError(error instanceof Error ? error.message : String(error));
-      setUpdateStatus(manual ? "error" : "idle");
+      setUpdateStatus(reports ? "error" : "idle");
     }
   }, []);
 
