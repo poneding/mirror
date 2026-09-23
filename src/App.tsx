@@ -1156,7 +1156,10 @@ function App() {
   const togglePlay = () => {
     if (!videoRef.current || !activeItem) return;
     const willPlay = videoRef.current.paused;
-    if (willPlay) void videoRef.current.play();
+    // A play the element refuses — no decodable track, or a load cutting it
+    // short — raises no play event, so the state is already right; the
+    // rejection just must not surface as an unhandled one.
+    if (willPlay) void videoRef.current.play().catch(() => setIsPlaying(false));
     else videoRef.current.pause();
     flashOsd(
       willPlay ? <Play size={16} fill="currentColor" /> : <Pause size={16} fill="currentColor" />,
@@ -1233,7 +1236,7 @@ function App() {
     if (action.kind === "repeat") {
       if (videoRef.current) {
         seekTo(0);
-        void videoRef.current.play();
+        void videoRef.current.play().catch(() => setIsPlaying(false));
       }
       return;
     }
