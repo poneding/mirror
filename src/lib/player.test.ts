@@ -42,6 +42,7 @@ import {
   isTextTruncated,
   isActivationKey,
   isTypingTarget,
+  languageTag,
   mediaKind,
   nextIndex,
   parseHistory,
@@ -150,6 +151,11 @@ describe("extensionOf / isSupportedVideo", () => {
 });
 
 describe("persisted setting defaults", () => {
+  it("tags the document with the interface language", () => {
+    expect(languageTag("zh")).toBe("zh-CN");
+    expect(languageTag("en")).toBe("en");
+  });
+
   it("uses fallbacks when storage is empty", () => {
     const store = fakeStore();
     expect(getInitialTheme(store)).toBe("dark");

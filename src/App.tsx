@@ -83,6 +83,7 @@ import {
   isTextTruncated,
   isActivationKey,
   isTypingTarget,
+  languageTag,
   mediaKind,
   nextIndex,
   parseHistory,
@@ -580,6 +581,12 @@ function App() {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem(STORAGE_KEYS.theme, theme);
   }, [theme]);
+
+  // index.html starts the page as zh-CN; the English interface must not stay
+  // announced, hyphenated and font-matched as Chinese.
+  useEffect(() => {
+    document.documentElement.lang = languageTag(language);
+  }, [language]);
 
   // The chosen faces ride the same two tokens the stylesheet defaults use, so
   // every element re-faces at once. The stock stack follows each choice as its

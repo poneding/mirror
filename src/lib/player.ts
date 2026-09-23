@@ -38,6 +38,15 @@ export function upgradeAssetSource(source: string): string {
 
 export type Theme = "dark" | "light" | "system";
 export type Language = "zh" | "en";
+
+/**
+ * The BCP 47 tag the document carries for a language, so assistive tech and
+ * the browser's own hyphenation and font choice follow the interface rather
+ * than the static `lang` the page started with.
+ */
+export function languageTag(language: Language): string {
+  return language === "zh" ? "zh-CN" : "en";
+}
 export type PlaybackMode = "pause" | "playlist" | "single" | "list";
 export type Panel = "settings" | "playlist" | null;
 
