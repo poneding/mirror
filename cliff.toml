@@ -35,6 +35,11 @@ commit_parsers = [
   { message = "^perf", group = "<!-- 3 -->Performance" },
   { message = "^refactor", group = "<!-- 4 -->Refactor" },
   { message = "^docs", group = "<!-- 5 -->Documentation" },
+  # A breaking change of any other type (`chore!:`, `ci!:`) is still one users
+  # must read. protect_breaking_commits stops the catch-all below from
+  # skipping it, but that leaves it with no group, and group_by drops a commit
+  # without one, so the note vanished. It gets a group of its own here.
+  { field = "breaking", pattern = "true", group = "<!-- 0 -->Breaking Changes" },
   # Everything else (chore, ci, style, test) is maintainer work, not a change
   # users read in the update notice.
   { message = ".*", skip = true },
