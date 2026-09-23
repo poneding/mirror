@@ -2103,6 +2103,7 @@ function ScrollArea({
   role,
   label,
   labelledBy,
+  onMouseDown,
 }: {
   children: ReactNode;
   className?: string;
@@ -2111,6 +2112,7 @@ function ScrollArea({
   /** Names the scroller itself, for roles that carry no visible label. */
   label?: string;
   labelledBy?: string;
+  onMouseDown?: (event: ReactMouseEvent<HTMLDivElement>) => void;
 }) {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [thumb, setThumb] = useState({ height: 0, top: 0 });
@@ -2185,7 +2187,7 @@ function ScrollArea({
   const scrollable = thumb.height > 0;
 
   return (
-    <div className={`scroll-area ${className}`.trim()}>
+    <div className={`scroll-area ${className}`.trim()} onMouseDown={onMouseDown}>
       <div
         className="scroll-view"
         ref={scrollerRef}
@@ -2523,7 +2525,11 @@ function Combobox({
         <ChevronDown size={13} aria-hidden="true" />
       </button>
       {open && (
-        <ScrollArea className="combobox-list" id={listId} role="listbox" label={label}>
+        // The trigger keeps focus while the list is open, and nothing in the
+        // list can take it, so a press there would blur the trigger onto the
+        // body: the blur closes the list before the click lands, and the
+        // choice is lost. The press keeps focus where it is instead.
+        <ScrollArea className="combobox-list" id={listId} role="listbox" label={label} onMouseDown={(event) => event.preventDefault()}>
           {options.map((option, index) => (
             <div
               key={option.value}
