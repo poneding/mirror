@@ -1008,7 +1008,21 @@ function App() {
     void invoke("set_traffic_lights_visible", { visible: chromeShown }).catch(() => undefined);
   }, [chromeShown, isFullscreen, isMac]);
 
+  /**
+   * Plays the loaded video, and spends the launch exception: a video restored
+   * paused at launch is now one the user asked for. A rejected play — codec,
+   * or a load interrupting it — is not an error to surface.
+   */
+  const playActive = () => {
+    launchIdRef.current = null;
+    void videoRef.current?.play().catch(() => undefined);
+  };
+
   const selectItem = (id: string) => {
+    // Picking the row that is already active is still a request to play it.
+    // Re-selecting the same id changes no state, so the load effect would not
+    // run and a video restored paused at launch stayed paused.
+    if (id === activeId) playActive();
     setActiveId(id);
     setPanel(null);
   };
@@ -1394,6 +1408,7 @@ function App() {
     setItems((current) => (current.some((item) => item.id === entry.id)
       ? current
       : [...current, historyToMediaItem(entry)]));
+    if (entry.id === activeId) playActive();
     setActiveId(entry.id);
     setPanelTab("history");
   };
