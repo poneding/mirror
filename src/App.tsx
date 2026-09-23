@@ -2449,6 +2449,16 @@ function Combobox({
     setOpen(false);
   };
 
+  /* Focus leaving the control — Tab, or a click on something unfocusable —
+     closes the list, as it does the open menu. The options are never focused
+     (the trigger keeps focus and tracks them by aria-activedescendant), so a
+     move within the control is only ever the trigger itself. */
+  const onBlur = (event: ReactFocusEvent<HTMLDivElement>) => {
+    if (!open) return;
+    const next = event.relatedTarget as Node | null;
+    if (!next || !event.currentTarget.contains(next)) setOpen(false);
+  };
+
   const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     switch (event.key) {
       case "Escape":
@@ -2489,7 +2499,7 @@ function Combobox({
   };
 
   return (
-    <div className={`combobox ${placement} ${variant}`} ref={rootRef} onKeyDown={onKeyDown}>
+    <div className={`combobox ${placement} ${variant}`} ref={rootRef} onKeyDown={onKeyDown} onBlur={onBlur}>
       <button
         type="button"
         role="combobox"
