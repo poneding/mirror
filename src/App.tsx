@@ -460,14 +460,22 @@ function App() {
    * `allowPreview` is passed in rather than read from state so a caller can turn
    * the preference on and re-check in the same tick, without the stale closure a
    * captured `previewUpdates` would give it.
+   *
+   * Checks can overlap — the launch check is still out when the user clicks
+   * 检查更新, or flips the preview preference — and whichever answered last
+   * used to write the status, so a quiet launch check could blank the dialog
+   * the manual one had just filled. Only the latest check may report.
    */
+  const updateCheckSeq = useRef(0);
   const runUpdateCheck = useCallback(async (manual: boolean, allowPreview: boolean) => {
     if (!isTauri()) return;
+    const seq = ++updateCheckSeq.current;
     setUpdateStatus("checking");
     setUpdateError("");
     if (manual) setUpdateDialogOpen(true);
     try {
       const found = await check();
+      if (seq !== updateCheckSeq.current) return;
       const offered = found !== null && acceptsUpdate(found.version, allowPreview);
       setAvailable(offered ? found : null);
       setBlockedPreview(found !== null && !offered ? found.version : null);
@@ -476,6 +484,7 @@ function App() {
       // asked for says nothing in any other case.
       if (offered && !manual) setUpdateDialogOpen(true);
     } catch (error) {
+      if (seq !== updateCheckSeq.current) return;
       setUpdateError(error instanceof Error ? error.message : String(error));
       setUpdateStatus(manual ? "error" : "idle");
     }
