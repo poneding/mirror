@@ -299,7 +299,12 @@ export function resolveEndedAction(
   }
 
   if (mode === "list" && items.length > 0) {
-    return { kind: "advance", id: items[nextIndex(current, items.length, 1)].id };
+    const next = nextIndex(current, items.length, 1);
+    // A wrap that lands on the item that just ended is a replay: the caller
+    // selects by id, and re-selecting the current id changes nothing, so the
+    // one-item list would stop instead of looping.
+    if (next === current) return { kind: "repeat" };
+    return { kind: "advance", id: items[next].id };
   }
 
   return { kind: "stop" };

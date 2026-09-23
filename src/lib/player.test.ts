@@ -441,6 +441,10 @@ describe("resolveEndedAction", () => {
     expect(resolveEndedAction(items, "c", "list")).toEqual({ kind: "advance", id: "a" });
   });
 
+  it("replays a one-item list rather than advancing to itself", () => {
+    expect(resolveEndedAction([item("only")], "only", "list")).toEqual({ kind: "repeat" });
+  });
+
   it("stops when the active item is unknown", () => {
     expect(resolveEndedAction(items, "ghost", "list")).toEqual({ kind: "stop" });
   });
