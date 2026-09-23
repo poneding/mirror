@@ -604,6 +604,17 @@ export function isTypingTarget(tagName: string): boolean {
 }
 
 /**
+ * True when a focused control answers this key itself, so the shortcut must
+ * stand aside: `Enter` and `Space` on a button are its activation, and
+ * preventing them on the way to the player silently disarms every button a
+ * keyboard user lands on — a settings switch, the rail, the update dialog's
+ * install button.
+ */
+export function isActivationKey(tagName: string, key: string): boolean {
+  return (tagName === "BUTTON" || tagName === "A") && (key === "Enter" || key === " ");
+}
+
+/**
  * True when an element's content is wider than its visible box, i.e. the CSS
  * ellipsis is active and the tail of the label is hidden. Equal measurements
  * mean the label fits, so `>` — not `>=` — decides the tooltip.

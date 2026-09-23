@@ -81,6 +81,7 @@ import {
   historyToMediaItem,
   isSupportedVideo,
   isTextTruncated,
+  isActivationKey,
   isTypingTarget,
   mediaKind,
   nextIndex,
@@ -836,16 +837,19 @@ function App() {
     const handleKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement;
       if (isTypingTarget(target.tagName) && event.key !== "Escape") return;
+      // A focused button answers Enter and Space itself; the shortcut stepping
+      // in would prevent the activation and leave the button dead.
+      if (isActivationKey(target.tagName, event.key)) return;
 
       const shortcut = resolveShortcut(event, platform);
       if (!shortcut) return;
 
-      event.preventDefault();
-
       // Escape closes the topmost surface. While the dialog is open nothing else
       // reaches the player either: a modal owns the keyboard, so Space must not
-      // toggle playback behind it.
+      // toggle playback behind it. Its keys are not prevented, though — the
+      // dialog's own controls still need them.
       if (shortcut.type === "escape") {
+        event.preventDefault();
         const outcome = resolveEscape(panel, isFullscreen, updateDialogOpen);
         if (outcome.handled && "closeDialog" in outcome) setUpdateDialogOpen(false);
         else if (outcome.handled && "close" in outcome) setPanel(null);
@@ -853,6 +857,8 @@ function App() {
         return;
       }
       if (updateDialogOpen) return;
+
+      event.preventDefault();
 
       switch (shortcut.type) {
         case "toggle-play":

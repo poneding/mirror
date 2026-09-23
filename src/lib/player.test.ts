@@ -40,6 +40,7 @@ import {
   isPreviewVersion,
   isSupportedVideo,
   isTextTruncated,
+  isActivationKey,
   isTypingTarget,
   mediaKind,
   nextIndex,
@@ -828,6 +829,21 @@ describe("isTypingTarget", () => {
     expect(isTypingTarget("SELECT")).toBe(true);
     expect(isTypingTarget("DIV")).toBe(false);
     expect(isTypingTarget("BUTTON")).toBe(false);
+  });
+});
+
+describe("isActivationKey", () => {
+  it("leaves Enter and Space to a focused button or link", () => {
+    expect(isActivationKey("BUTTON", "Enter")).toBe(true);
+    expect(isActivationKey("BUTTON", " ")).toBe(true);
+    expect(isActivationKey("A", "Enter")).toBe(true);
+  });
+
+  it("keeps every other key, and every other element, for the shortcuts", () => {
+    expect(isActivationKey("BUTTON", "ArrowRight")).toBe(false);
+    expect(isActivationKey("BUTTON", "Escape")).toBe(false);
+    expect(isActivationKey("DIV", "Enter")).toBe(false);
+    expect(isActivationKey("BODY", " ")).toBe(false);
   });
 });
 
