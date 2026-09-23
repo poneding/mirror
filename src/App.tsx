@@ -203,7 +203,11 @@ const copy = {
     fullScreen: "全屏",
     closePanel: "关闭面板",
     playbackSpeed: "倍速",
-    muted: "已静音",
+    mute: "静音",
+    unmute: "取消静音",
+    previous: "上一个",
+    next: "下一个",
+    progress: "播放进度",
     clearHistoryDone: "播放记录已清除",
     clearPlaylistDone: "播放列表已清空",
     history: "历史记录",
@@ -285,7 +289,11 @@ const copy = {
     fullScreen: "Fullscreen",
     closePanel: "Close panel",
     playbackSpeed: "Speed",
-    muted: "Muted",
+    mute: "Mute",
+    unmute: "Unmute",
+    previous: "Previous",
+    next: "Next",
+    progress: "Progress",
     clearHistoryDone: "Watch history cleared",
     clearPlaylistDone: "Playlist cleared",
     history: "History",
@@ -1567,7 +1575,7 @@ function App() {
         <div className="progress-row">
           <span className="time-label">{formatTime(currentTime)}</span>
           <input
-            aria-label="Progress"
+            aria-label={strings.progress}
             className="progress-input"
             type="range"
             min="0"
@@ -1586,18 +1594,18 @@ function App() {
         <div className="controls-row">
           <div className="controls-left">
             <div className="volume-control">
-              <button className="control-button" onClick={() => applyVolume(volume > 0 ? 0 : 0.8)} {...tipFor("mute", volume === 0 ? "Unmute" : strings.muted)} aria-label={volume === 0 ? "Unmute" : strings.muted}>
+              <button className="control-button" onClick={() => applyVolume(volume > 0 ? 0 : 0.8)} {...tipFor("mute", volume === 0 ? strings.unmute : strings.mute)} aria-label={volume === 0 ? strings.unmute : strings.mute}>
                 {volumeIcon(volume, 17)}
               </button>
               <input aria-label={strings.volume} className="volume-input" type="range" min="0" max="1" step="0.01" value={volume} onChange={(event) => applyVolume(Number(event.target.value))} style={{ "--progress": `${volume * 100}%` } as CSSProperties} />
             </div>
           </div>
           <div className="controls-center">
-            <button className="control-button" onClick={() => moveTrack(-1)} {...tipFor("previous", strings.nextPrevious)} aria-label="Previous"><SkipBack size={17} fill="currentColor" /></button>
+            <button className="control-button" onClick={() => moveTrack(-1)} {...tipFor("previous", strings.previous)} aria-label={strings.previous}><SkipBack size={17} fill="currentColor" /></button>
             <button className="play-button" onClick={togglePlay} {...tipFor("play-pause", strings.playPause)} aria-label={strings.playPause}>
               {isPlaying ? <Pause size={17} fill="currentColor" /> : <Play size={17} fill="currentColor" />}
             </button>
-            <button className="control-button" onClick={() => moveTrack(1)} {...tipFor("next", strings.nextPrevious)} aria-label="Next"><SkipForward size={17} fill="currentColor" /></button>
+            <button className="control-button" onClick={() => moveTrack(1)} {...tipFor("next", strings.next)} aria-label={strings.next}><SkipForward size={17} fill="currentColor" /></button>
           </div>
           <div className="controls-right">
             <Combobox
