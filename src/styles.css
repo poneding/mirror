@@ -6,9 +6,19 @@
      anything that counts: a timecode, the seek step, the playback speed, a
      playlist number, a version, a shortcut key. */
   --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans", sans-serif;
-  /* `Cascadia Mono` and `Consolas` are named explicitly: `Menlo` is macOS-only,
-     and the bare `monospace` default on Windows is Courier New. */
-  --font-mono: ui-monospace, "Cascadia Mono", Consolas, SFMono-Regular, Menlo, monospace;
+  /* Every fixed-pitch face is named: `Menlo` is macOS-only, `Cascadia Mono` and
+     `Consolas` are Windows, and DejaVu / Noto / Liberation are what a Linux
+     box has. None of them has CJK, so the sans token closes the list: a Han
+     glyph — the OSD's 播放/音量 — walks past them and lands in the interface
+     face, the one picked in the settings. It used to land in NSimSun: the
+     generic `monospace` resolves, per the page's `lang`, to the platform's
+     fixed-pitch Song face, and that face covers Han, so the walk stopped there.
+     There is no generic after the sans token because none could ever be
+     reached — the sans stack ends in `system-ui` and `sans-serif`, which
+     resolve everywhere and cover every Latin glyph — so a Linux box without
+     the named faces gets its timecodes in the interface face; naming the three
+     common ones is what keeps that box fixed-pitch. */
+  --font-mono: ui-monospace, "Cascadia Mono", Consolas, SFMono-Regular, Menlo, "DejaVu Sans Mono", "Noto Sans Mono", "Liberation Mono", var(--font-sans);
 
   font-family: var(--font-sans);
   font-synthesis: none;

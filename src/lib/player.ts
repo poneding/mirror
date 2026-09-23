@@ -114,8 +114,15 @@ export function getInitialTheme(store: KeyValueStore): Theme {
 export const DEFAULT_SANS_STACK =
   'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans", sans-serif';
 
-/** The default counting face, identical to `--font-mono` in styles.css. */
-export const DEFAULT_MONO_STACK = 'ui-monospace, "Cascadia Mono", Consolas, SFMono-Regular, Menlo, monospace';
+/** The default counting face, identical to `--font-mono` in styles.css. Its
+ *  closing `var(--font-sans)` is the CJK fallback: no face ahead of it has Han
+ *  glyphs, so a Chinese value — the OSD's 播放/音量 — is set in the interface
+ *  face rather than the platform's fixed-pitch Song face. The Linux faces are
+ *  named because nothing after the sans token can ever be reached: its
+ *  generics cover every Latin glyph. This value is CSS only — it resolves a
+ *  custom property and means nothing outside a stylesheet or inline style. */
+export const DEFAULT_MONO_STACK =
+  'ui-monospace, "Cascadia Mono", Consolas, SFMono-Regular, Menlo, "DejaVu Sans Mono", "Noto Sans Mono", "Liberation Mono", var(--font-sans)';
 
 /** Reads a free-form persisted string; a missing key means "not set". */
 export function getInitialString(store: KeyValueStore, key: string): string {

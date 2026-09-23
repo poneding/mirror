@@ -73,6 +73,32 @@ describe("fonts", () => {
     expect(value(":root", "--font-mono")).toBe(DEFAULT_MONO_STACK);
   });
 
+  it("hands the counting face's CJK glyphs to the interface face", () => {
+    // No named fixed-pitch face has Han glyphs, and the generic `monospace`
+    // resolves to the platform's fixed-pitch Song face (NSimSun on Windows),
+    // which does: the OSD's 播放 and 音量 were set in a face the rest of the
+    // interface never uses, and one the user cannot change. The sans token
+    // closes the list instead, so a Han glyph walks past the named faces into
+    // the interface face. Nothing may follow it: its own generics resolve
+    // everywhere and cover every Latin glyph, so a `monospace` after it is
+    // unreachable and only claims a fallback that does not exist.
+    expect(value(":root", "--font-mono")).toMatch(/var\(--font-sans\)$/);
+  });
+
+  it("names a fixed-pitch face for every platform ahead of the sans token", () => {
+    // The sans token catches every Latin glyph too, so a box whose fixed-pitch
+    // face is not named ahead of it sets its timecodes in the interface face.
+    // Linux has no Consolas or Menlo: without its own faces named, the whole
+    // AppImage counted in the proportional GTK font.
+    const stack = value(":root", "--font-mono") ?? "";
+    const sansAt = stack.indexOf("var(--font-sans)");
+    for (const face of ['"Cascadia Mono"', "Consolas", "Menlo", '"DejaVu Sans Mono"', '"Noto Sans Mono"', '"Liberation Mono"']) {
+      const at = stack.indexOf(face);
+      expect(at, face).toBeGreaterThan(-1);
+      expect(at, face).toBeLessThan(sansAt);
+    }
+  });
+
   it("sets everything that counts in the mono face", () => {
     for (const selector of [
       ".num",
