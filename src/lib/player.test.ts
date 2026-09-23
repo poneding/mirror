@@ -360,20 +360,27 @@ describe("mediaKind", () => {
 
 describe("resolveAutoplay", () => {
   it("keeps the item restored at launch paused", () => {
-    expect(resolveAutoplay("a", "a")).toEqual({ autoplay: false, launchId: "a" });
+    expect(resolveAutoplay("a", "a")).toEqual({ autoplay: false, pausedId: "a" });
   });
 
   it("plays a user-chosen item and spends the launch exception", () => {
-    expect(resolveAutoplay("a", "b")).toEqual({ autoplay: true, launchId: null });
+    expect(resolveAutoplay("a", "b")).toEqual({ autoplay: true, pausedId: null });
   });
 
   it("plays the launch item again once the exception is spent", () => {
-    expect(resolveAutoplay(null, "a")).toEqual({ autoplay: true, launchId: null });
+    expect(resolveAutoplay(null, "a")).toEqual({ autoplay: true, pausedId: null });
   });
 
   it("plays every load when nothing was restored", () => {
-    expect(resolveAutoplay(null, "b")).toEqual({ autoplay: true, launchId: null });
-    expect(resolveAutoplay(null, null)).toEqual({ autoplay: true, launchId: null });
+    expect(resolveAutoplay(null, "b")).toEqual({ autoplay: true, pausedId: null });
+    expect(resolveAutoplay(null, null)).toEqual({ autoplay: true, pausedId: null });
+  });
+
+  it("keeps the neighbour that replaces a removed item paused, once", () => {
+    // Removing the active row hands the stage to the next one; that load is
+    // not a request to play, but the one after it is.
+    expect(resolveAutoplay("b", "b")).toEqual({ autoplay: false, pausedId: "b" });
+    expect(resolveAutoplay("b", "c")).toEqual({ autoplay: true, pausedId: null });
   });
 });
 

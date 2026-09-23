@@ -373,7 +373,7 @@ function App() {
    * (adding, picking, next/previous) plays. Cleared once another item loads, so
    * returning to this one later behaves like any other selection.
    */
-  const launchIdRef = useRef<string | null>(resolveActiveId(items, activeId));
+  const pausedLoadRef = useRef<string | null>(resolveActiveId(items, activeId));
   const [panel, setPanel] = useState<Panel>(null);
   const [theme, setTheme] = useState<Theme>(() => getInitialTheme(store));
   const [language, setLanguage] = useState<Language>(() => getInitialLanguage(store));
@@ -667,8 +667,8 @@ function App() {
   useEffect(() => {
     const video = videoRef.current;
     if (!activeSource || !video) return;
-    const decision = resolveAutoplay(launchIdRef.current, activeId);
-    launchIdRef.current = decision.launchId;
+    const decision = resolveAutoplay(pausedLoadRef.current, activeId);
+    pausedLoadRef.current = decision.pausedId;
     video.src = activeSource;
     video.load();
     // A target that was waiting for the old media has nothing left to land on.
@@ -1014,7 +1014,7 @@ function App() {
    * or a load interrupting it — is not an error to surface.
    */
   const playActive = () => {
-    launchIdRef.current = null;
+    pausedLoadRef.current = null;
     void videoRef.current?.play().catch(() => undefined);
   };
 
@@ -1306,14 +1306,14 @@ function App() {
   };
 
   const removeItem = (id: string) => {
-    setItems((current) => {
-      const next = current.filter((item) => item.id !== id);
-      if (id === activeId) {
-        const fallback = next[0];
-        setActiveId(fallback?.id || null);
-      }
-      return next;
-    });
+    setItems((current) => current.filter((item) => item.id !== id));
+    if (id === activeId) {
+      // The stage passes to the first remaining item, paused: removing a row
+      // is not a request to play the one after it.
+      const fallback = items.find((item) => item.id !== id);
+      pausedLoadRef.current = fallback?.id ?? null;
+      setActiveId(fallback?.id ?? null);
+    }
   };
 
   const clearHistory = () => {

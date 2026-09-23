@@ -239,17 +239,19 @@ export function resolveActiveId(items: MediaItem[], activeId: string | null): st
 /**
  * Decides whether a load should start playing.
  *
- * The item that was active when the app opened must stay paused: launching
- * Mirror is not a request to play. Every later load comes from something the
- * user did — adding a file, picking a row, moving to the next track — so it
- * plays. The exception is spent once another item loads, which is why the
- * returned `launchId` is kept for the next call.
+ * `pausedId` names the one item whose next load stays paused. It is the item
+ * that was active when the app opened — launching Mirror is not a request to
+ * play — and the neighbour that takes the stage when the active item is
+ * removed, since deleting a row is not one either. Every other load comes
+ * from something the user did — adding a file, picking a row, moving to the
+ * next track — so it plays. The exception is spent once another item loads,
+ * which is why the returned `pausedId` is kept for the next call.
  */
-export type AutoplayDecision = { autoplay: boolean; launchId: string | null };
+export type AutoplayDecision = { autoplay: boolean; pausedId: string | null };
 
-export function resolveAutoplay(launchId: string | null, activeId: string | null): AutoplayDecision {
-  if (launchId !== null && launchId === activeId) return { autoplay: false, launchId };
-  return { autoplay: true, launchId: null };
+export function resolveAutoplay(pausedId: string | null, activeId: string | null): AutoplayDecision {
+  if (pausedId !== null && pausedId === activeId) return { autoplay: false, pausedId };
+  return { autoplay: true, pausedId: null };
 }
 
 /** Wraps around in both directions, so prev at index 0 lands on the last item. */
