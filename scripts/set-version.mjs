@@ -8,10 +8,12 @@
 //   package-lock.json          npm's record of the above
 //   src-tauri/tauri.conf.json  the version Tauri bakes into the bundles
 //   src-tauri/Cargo.toml       CARGO_PKG_VERSION
+//   src-tauri/Cargo.lock       cargo's record of the above
 //
-// src-tauri/Cargo.lock is deliberately left alone: the next cargo build
-// rewrites the `mirror` entry on its own. Existing formatting is preserved —
-// the fields are replaced in place, not re-serialised.
+// Cargo.lock is stamped too so the release builds with `--locked`: a lock
+// that disagrees with Cargo.toml makes cargo re-resolve, and the build then
+// compiles dependency versions nobody tested. Existing formatting is preserved
+// — the fields are replaced in place, not re-serialised.
 //
 // Usage: node scripts/set-version.mjs v1.2.3
 import { readFileSync, writeFileSync } from "node:fs";
@@ -72,6 +74,18 @@ function stampCargoToml(relativePath) {
   write(relativePath, before, before.replace(pattern, `version = "${version}"`));
 }
 
+function stampCargoLock(relativePath) {
+  // The lock lists every crate as a [[package]] block; only Mirror's own
+  // carries this version. The block is matched by name so a dependency that
+  // happens to share the version string is left alone.
+  const pattern = /^(\[\[package\]\]\r?\nname = "mirror"\r?\nversion = )"[^"]*"/m;
+  const before = readFileSync(join(root, relativePath), "utf8");
+  if (!pattern.test(before)) {
+    throw new Error(`set-version: no mirror package found in ${relativePath}`);
+  }
+  write(relativePath, before, before.replace(pattern, `$1"${version}"`));
+}
+
 stampJson("package.json", 1, (pkg) => pkg.version === version);
 stampJson(
   "package-lock.json",
@@ -80,5 +94,6 @@ stampJson(
 );
 stampJson("src-tauri/tauri.conf.json", 1, (config) => config.version === version);
 stampCargoToml("src-tauri/Cargo.toml");
+stampCargoLock("src-tauri/Cargo.lock");
 
 console.log(`mirror ${version}`);

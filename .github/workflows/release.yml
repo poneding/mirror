@@ -119,20 +119,23 @@ jobs:
       # A broken target must not cancel the others: every job uploads to the
       # same release and re-running a single job is expected.
       fail-fast: false
+      # Everything after `--` reaches cargo: `--locked` refuses a stale
+      # Cargo.lock instead of quietly re-resolving dependencies, which is why
+      # set-version.mjs stamps the lock as well.
       matrix:
         include:
           - label: macOS (Apple silicon)
             platform: macos-latest
-            args: --target aarch64-apple-darwin --bundles app,dmg
+            args: --target aarch64-apple-darwin --bundles app,dmg -- --locked
           - label: macOS (Intel)
             platform: macos-latest
-            args: --target x86_64-apple-darwin --bundles app,dmg
+            args: --target x86_64-apple-darwin --bundles app,dmg -- --locked
           - label: Linux
             platform: ubuntu-22.04
-            args: --bundles appimage,deb
+            args: --bundles appimage,deb -- --locked
           - label: Windows
             platform: windows-latest
-            args: --bundles nsis
+            args: --bundles nsis -- --locked
     runs-on: ${{ matrix.platform }}
     steps:
       - name: Checkout the tag

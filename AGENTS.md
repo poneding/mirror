@@ -31,7 +31,7 @@ src/                           Frontend: WebView UI
   styles.css                   CSS variables + frosted surfaces
 
 cliff.toml                     git-cliff config: the shape of the release notes
-scripts/set-version.mjs        Writes the release tag's version into the four files that carry it
+scripts/set-version.mjs        Writes the release tag's version into the five files that carry it
 .github/workflows/release.yml  Builds, signs and publishes on a published release
 ```
 

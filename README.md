@@ -91,7 +91,7 @@ git tag v0.2.0 && git push origin v0.2.0
 
 `.github/workflows/release.yml` 会：
 
-1. 校验 tag 符合 SemVer（`v1.2.3`，预发布用 `v1.2.3-rc.1`），并把它写入 `package.json`、`package-lock.json`、`tauri.conf.json`、`Cargo.toml`（`scripts/set-version.mjs`，tag 即版本号唯一来源）。
+1. 校验 tag 符合 SemVer（`v1.2.3`，预发布用 `v1.2.3-rc.1`），并把它写入 `package.json`、`package-lock.json`、`tauri.conf.json`、`Cargo.toml`、`Cargo.lock`（`scripts/set-version.mjs`，tag 即版本号唯一来源）。
 2. 创建 Release（已存在则只更新正文），用 git-cliff（`cliff.toml`）生成本次 tag 的 changelog 写进正文。
 3. 在 macOS（arm64 + x86_64）、Linux、Windows 上构建、签名，上传安装包与 `latest.json`。
 
