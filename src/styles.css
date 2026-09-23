@@ -2179,8 +2179,12 @@ kbd {
     width: 48px;
   }
 
-  .side-panel {
-    top: 7px;
+  /* Both panels take the full width below the titlebar. The settings panel is
+     named as well, or its own left/width rules outrank this one and only its
+     top moved — two panels, two narrow layouts. */
+  .side-panel,
+  .side-panel.settings {
+    top: calc(var(--titlebar-height) + 7px);
     right: 7px;
     bottom: 7px;
     left: 7px;
