@@ -697,7 +697,6 @@ function App() {
       return () => window.removeEventListener("resize", measure);
     }
     const appWindow = getCurrentWindow();
-    let unlisten: (() => void) | undefined;
     const measure = () => {
       void Promise.all([appWindow.innerSize(), appWindow.scaleFactor()])
         .then(([size, scale]) => {
@@ -711,13 +710,13 @@ function App() {
         .catch(() => undefined);
     };
     measure();
-    void appWindow
-      .onResized(measure)
-      .then((dispose) => {
-        unlisten = dispose;
-      })
-      .catch(() => undefined);
-    return () => unlisten?.();
+    // Disposed through the subscription promise, like the drag-drop listener:
+    // under StrictMode the cleanup can run before it resolves, and a captured
+    // `let` would then leave the first listener behind.
+    const subscription = appWindow.onResized(measure);
+    return () => {
+      void subscription.then((dispose) => dispose()).catch(() => undefined);
+    };
   }, []);
 
   /**
@@ -836,18 +835,14 @@ function App() {
   useEffect(() => {
     if (!isTauri()) return;
     const window = getCurrentWindow();
-    let unlisten: (() => void) | undefined;
     const sync = () => {
       void window.isMaximized().then(setIsMaximized).catch(() => undefined);
     };
     sync();
-    void window
-      .onResized(sync)
-      .then((dispose) => {
-        unlisten = dispose;
-      })
-      .catch(() => undefined);
-    return () => unlisten?.();
+    const subscription = window.onResized(sync);
+    return () => {
+      void subscription.then((dispose) => dispose()).catch(() => undefined);
+    };
   }, []);
 
   useEffect(() => {
