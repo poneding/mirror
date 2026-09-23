@@ -1919,10 +1919,14 @@ function UpdateDialog({
     if (focusable.length === 0) return;
     const first = focusable[0];
     const last = focusable[focusable.length - 1];
-    if (event.shiftKey && document.activeElement === first) {
+    // Focus starts on the card itself, which is in no list: from there the
+    // first Tab lands on the first control and Shift+Tab on the last, so the
+    // walk never steps out to the backdrop and the panel behind the modal.
+    const inside = focusable.includes(document.activeElement as HTMLElement);
+    if (event.shiftKey && (!inside || document.activeElement === first)) {
       event.preventDefault();
       last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
+    } else if (!event.shiftKey && (!inside || document.activeElement === last)) {
       event.preventDefault();
       first.focus();
     }
@@ -1934,7 +1938,7 @@ function UpdateDialog({
 
   return (
     <div className="update-dialog-layer">
-      <button className="dialog-backdrop" aria-label={strings.closeDialog} onClick={onClose} />
+      <button className="dialog-backdrop" tabIndex={-1} aria-label={strings.closeDialog} onClick={onClose} />
       <div
         className="update-dialog"
         role="dialog"
