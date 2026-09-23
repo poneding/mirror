@@ -856,17 +856,24 @@ describe("isTypingTarget", () => {
 });
 
 describe("isActivationKey", () => {
-  it("leaves Enter and Space to a focused button or link", () => {
-    expect(isActivationKey("BUTTON", "Enter")).toBe(true);
-    expect(isActivationKey("BUTTON", " ")).toBe(true);
-    expect(isActivationKey("A", "Enter")).toBe(true);
+  it("leaves Enter and Space to a button or link the keyboard focused", () => {
+    expect(isActivationKey("BUTTON", "Enter", true)).toBe(true);
+    expect(isActivationKey("BUTTON", " ", true)).toBe(true);
+    expect(isActivationKey("A", "Enter", true)).toBe(true);
+  });
+
+  // Regression: a clicked button keeps focus, and Space after clicking 下一个
+  // skipped another track instead of pausing.
+  it("keeps them for the shortcuts when the pointer put focus there", () => {
+    expect(isActivationKey("BUTTON", " ", false)).toBe(false);
+    expect(isActivationKey("BUTTON", "Enter", false)).toBe(false);
   });
 
   it("keeps every other key, and every other element, for the shortcuts", () => {
-    expect(isActivationKey("BUTTON", "ArrowRight")).toBe(false);
-    expect(isActivationKey("BUTTON", "Escape")).toBe(false);
-    expect(isActivationKey("DIV", "Enter")).toBe(false);
-    expect(isActivationKey("BODY", " ")).toBe(false);
+    expect(isActivationKey("BUTTON", "ArrowRight", true)).toBe(false);
+    expect(isActivationKey("BUTTON", "Escape", true)).toBe(false);
+    expect(isActivationKey("DIV", "Enter", true)).toBe(false);
+    expect(isActivationKey("BODY", " ", true)).toBe(false);
   });
 });
 

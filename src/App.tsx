@@ -852,13 +852,50 @@ function App() {
     };
   }, []);
 
+  /**
+   * Whether the focused element got there by a pointer press. A clicked button
+   * keeps focus, but it was not brought there to be worked from the keyboard:
+   * `Space` after clicking 下一个 must pause, not skip another track. Only a
+   * button reached by keyboard keeps `Enter` and `Space` as its activation.
+   * `:focus-visible` cannot make this call — Chromium turns it on for the
+   * focused element at the first key press, the very press being judged; so
+   * the last input that moved focus is tracked here instead. Focus a script
+   * moves (the dialog returning it to its opener) inherits the input that led
+   * to it.
+   */
+  const focusByPointer = useRef(false);
+  useEffect(() => {
+    let lastInput: "pointer" | "keyboard" = "keyboard";
+    const onPointerDown = () => {
+      lastInput = "pointer";
+      // Pressing the element that already has focus moves nothing, so no
+      // focusin follows; the press still decides what that focus is.
+      focusByPointer.current = true;
+    };
+    const onKeyDown = () => {
+      lastInput = "keyboard";
+    };
+    const onFocusIn = () => {
+      focusByPointer.current = lastInput === "pointer";
+    };
+    window.addEventListener("pointerdown", onPointerDown, true);
+    window.addEventListener("keydown", onKeyDown, true);
+    window.addEventListener("focusin", onFocusIn, true);
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown, true);
+      window.removeEventListener("keydown", onKeyDown, true);
+      window.removeEventListener("focusin", onFocusIn, true);
+    };
+  }, []);
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement;
       if (isTypingTarget(target.tagName) && event.key !== "Escape") return;
-      // A focused button answers Enter and Space itself; the shortcut stepping
-      // in would prevent the activation and leave the button dead.
-      if (isActivationKey(target.tagName, event.key)) return;
+      // A button the keyboard focused answers Enter and Space itself; the
+      // shortcut stepping in would prevent the activation and leave it dead.
+      // A clicked one does not: its keys stay the player's.
+      if (isActivationKey(target.tagName, event.key, !focusByPointer.current)) return;
 
       const shortcut = resolveShortcut(event, platform);
       if (!shortcut) return;

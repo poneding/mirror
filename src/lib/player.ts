@@ -635,9 +635,14 @@ export function isTypingTarget(tagName: string): boolean {
  * preventing them on the way to the player silently disarms every button a
  * keyboard user lands on — a settings switch, the rail, the update dialog's
  * install button.
+ *
+ * Only a button the keyboard brought focus to (`:focus-visible`) keeps them.
+ * A clicked button keeps focus too, and handing it the keys would turn the
+ * player's own shortcuts into repeats of the last click: `Space` after
+ * clicking 下一个 skipped another track instead of pausing.
  */
-export function isActivationKey(tagName: string, key: string): boolean {
-  return (tagName === "BUTTON" || tagName === "A") && (key === "Enter" || key === " ");
+export function isActivationKey(tagName: string, key: string, keyboardFocused: boolean): boolean {
+  return keyboardFocused && (tagName === "BUTTON" || tagName === "A") && (key === "Enter" || key === " ");
 }
 
 /**

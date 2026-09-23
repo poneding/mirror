@@ -242,7 +242,16 @@ fullscreen.
 Shortcuts must never fire while a text input, textarea, or select has focus
 (`isTypingTarget`), with `Esc` as the only exception. A modal owns the keyboard:
 while the update dialog is open every key but `Esc` is dropped, so `Space` cannot
-toggle playback behind it.
+toggle playback behind it — and dropped without `preventDefault`, so the dialog's
+own buttons still answer `Enter` and `Space`.
+
+A button the keyboard brought focus to keeps `Enter` and `Space` as its
+activation (`isActivationKey`): a settings switch reached with `Tab` toggles on
+`Space` instead of playback. A button the pointer focused does not — a clicked
+button keeps focus, and `Space` after clicking 下一个 must pause, not skip
+another track. `App.tsx` tells the two apart by the last input that moved focus;
+`:focus-visible` cannot, because Chromium switches it on for the focused element
+at the first key press, which is the press being judged.
 
 The settings panel lists **only the bindings for the platform it is running on**
 (`shortcutKeys` + `SHORTCUT_ORDER`), so the keys shown always match the keys that
