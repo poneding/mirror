@@ -313,9 +313,30 @@ fn enumerate_system_fonts() -> SystemFonts {
 /// reuse: the first settings render waits, later ones do not.
 static SYSTEM_FONTS: OnceLock<SystemFonts> = OnceLock::new();
 
+/// Async so the first scan runs on a worker thread. A command that is not
+/// async runs inline on the main thread, and a full system font scan there
+/// froze the window for its duration.
 #[tauri::command]
-fn list_system_fonts() -> Result<SystemFonts, String> {
-    Ok(SYSTEM_FONTS.get_or_init(enumerate_system_fonts).clone())
+async fn list_system_fonts() -> Result<SystemFonts, String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        SYSTEM_FONTS.get_or_init(enumerate_system_fonts).clone()
+    })
+    .await
+    .map_err(|error| error.to_string())
+}
+
+/// The command behind 打开文件夹 and a dropped selection. Async for the same
+/// reason as `list_system_fonts`: a walk over a large tree or a network share
+/// takes as long as it takes, and the window must stay movable, paintable
+/// and closable while it does.
+#[tauri::command]
+async fn collect_video_paths(
+    paths: Vec<String>,
+    extensions: Vec<String>,
+) -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || collect_videos(paths, extensions))
+        .await
+        .map_err(|error| error.to_string())?
 }
 
 /// Video file paths under any of `paths`, in the order a person would list
@@ -330,8 +351,7 @@ fn list_system_fonts() -> Result<SystemFonts, String> {
 /// One unreadable folder must not sink the whole selection, so entries that
 /// cannot be read are skipped. A directory reached through a symlink is not
 /// walked: a link that points back at a parent would otherwise loop forever.
-#[tauri::command]
-fn collect_video_paths(paths: Vec<String>, extensions: Vec<String>) -> Result<Vec<String>, String> {
+fn collect_videos(paths: Vec<String>, extensions: Vec<String>) -> Result<Vec<String>, String> {
     let extensions: HashSet<String> = extensions
         .iter()
         .map(|extension| extension.trim_start_matches('.').to_lowercase())
@@ -664,7 +684,7 @@ mod tests {
         tree.write("Season 1/Extras/trailer.mp4");
         tree.write("Season 2/e03.mp4");
 
-        let collected = collect_video_paths(
+        let collected = collect_videos(
             vec![path_string(&tree.root)],
             vec!["mp4".into(), "mkv".into()],
         )
@@ -692,9 +712,8 @@ mod tests {
         let notes = tree.write("notes.txt");
         let missing = path_string(&tree.root.join("gone.mp4"));
 
-        let collected =
-            collect_video_paths(vec![video.clone(), notes, missing], vec![".mp4".into()])
-                .expect("a path list");
+        let collected = collect_videos(vec![video.clone(), notes, missing], vec![".mp4".into()])
+            .expect("a path list");
 
         assert_eq!(collected, [video]);
     }
@@ -708,7 +727,7 @@ mod tests {
         tree.write("Season/unnamed");
         tree.write("Season/bonus.mp4");
 
-        let collected = collect_video_paths(
+        let collected = collect_videos(
             vec![picked.clone(), path_string(&tree.root.join("Season"))],
             vec!["mp4".into()],
         )
@@ -720,13 +739,13 @@ mod tests {
     /// Nothing to collect is an empty answer, not a failure.
     #[test]
     fn collect_answers_nothing_for_an_empty_selection() {
-        assert!(collect_video_paths(Vec::new(), vec!["mp4".into()])
+        assert!(collect_videos(Vec::new(), vec!["mp4".into()])
             .expect("a path list")
             .is_empty());
 
         let tree = TempTree::new("empty");
-        let collected = collect_video_paths(vec![path_string(&tree.root)], vec!["mp4".into()])
-            .expect("a path list");
+        let collected =
+            collect_videos(vec![path_string(&tree.root)], vec!["mp4".into()]).expect("a path list");
         assert!(collected.is_empty());
     }
 
