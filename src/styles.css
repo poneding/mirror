@@ -949,12 +949,14 @@ input {
 
 /* ---------- panels ---------- */
 
-/* Covers the titlebar as well: an open panel mutes the whole window, and its
-   own close button (or Esc) is the way out. */
+/* Mutes the window below the titlebar: the titlebar stays out from under it
+   so the window remains draggable and closable while a panel is open (the
+   panels open beneath the titlebar, so nothing of theirs is uncovered). The
+   panel's own close button, the backdrop or Esc is the way out. */
 .panel-backdrop {
   position: absolute;
   z-index: 15;
-  inset: 0;
+  inset: var(--titlebar-height) 0 0 0;
   border: 0;
   background: var(--scrim-panel);
   cursor: pointer;
