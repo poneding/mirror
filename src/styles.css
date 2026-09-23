@@ -1971,6 +1971,21 @@ kbd {
   font-size: 11px;
 }
 
+.changelog pre {
+  margin: 0 0 var(--gap-list);
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--glass-hover);
+  overflow-x: auto;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.changelog pre code {
+  padding: 0;
+  background: none;
+}
+
 .changelog hr {
   margin: 10px 0;
   border: 0;

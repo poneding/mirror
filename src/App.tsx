@@ -2045,6 +2045,8 @@ function UpdateDialog({
               : <ul key={index}>{block.items.map((item, itemIndex) => <li key={itemIndex}>{inline(item, tipFor)}</li>)}</ul>;
           case "rule":
             return <hr key={index} />;
+          case "code":
+            return <pre key={index}><code>{block.value}</code></pre>;
           default:
             return <p key={index}>{inline(block.content, tipFor)}</p>;
         }

@@ -80,6 +80,20 @@ describe("release notes", () => {
     ]);
   });
 
+  it("continues a list item on an indented line instead of ending the list", () => {
+    expect(parseMarkdown("- one\n  continued\n- two")).toEqual([
+      { type: "list", ordered: false, items: [[{ type: "text", value: "one continued" }], [{ type: "text", value: "two" }]] },
+    ]);
+  });
+
+  it("keeps a fenced block verbatim, and closes an unterminated one at the end", () => {
+    expect(parseMarkdown("```sh\n# not a heading\n\n- not a bullet\n```\nafter")).toEqual([
+      { type: "code", value: "# not a heading\n\n- not a bullet" },
+      { type: "paragraph", content: [{ type: "text", value: "after" }] },
+    ]);
+    expect(parseMarkdown("```\nopen")).toEqual([{ type: "code", value: "open" }]);
+  });
+
   it("returns nothing for an empty body", () => {
     expect(parseMarkdown("")).toEqual([]);
     expect(parseMarkdown("\n \n\t\n")).toEqual([]);

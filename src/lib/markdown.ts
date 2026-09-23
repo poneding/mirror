@@ -7,6 +7,10 @@
  * remote text out of the document — release notes are shown as elements, never
  * as markup, so a commit message containing `<script>` stays literal text.
  *
+ * A fenced block and an indented continuation of a list item are read as
+ * well, for a body edited by hand after the workflow wrote it: the reader must
+ * not turn either into a paragraph of stray markup.
+ *
  * Inline support: `**bold**`, `` `code` `` and `[label](https://…)`. The cliff
  * template emits nothing else, and italics are left alone on purpose because
  * `*` shows up in ordinary commit subjects.
@@ -22,12 +26,14 @@ export type BlockNode =
   | { type: "heading"; level: number; content: InlineNode[] }
   | { type: "list"; ordered: boolean; items: InlineNode[][] }
   | { type: "paragraph"; content: InlineNode[] }
+  | { type: "code"; value: string }
   | { type: "rule" };
 
 const HEADING = /^(#{1,6})\s+(.*)$/;
 const RULE = /^(-{3,}|\*{3,}|_{3,})$/;
 const BULLET = /^[-*+]\s+(\S.*)$/;
 const ORDERED = /^\d+[.)]\s+(\S.*)$/;
+const FENCE = /^```/;
 const INLINE = /\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\([^)\s]+\)/g;
 
 /** Splits a paragraph or list item into text, bold, code and link runs. */
@@ -59,6 +65,7 @@ export function parseMarkdown(source: string): BlockNode[] {
   const blocks: BlockNode[] = [];
   let paragraph: string[] = [];
   let list: { ordered: boolean; items: string[] } | null = null;
+  let fence: string[] | null = null;
 
   const flushParagraph = () => {
     if (paragraph.length === 0) return;
@@ -74,6 +81,24 @@ export function parseMarkdown(source: string): BlockNode[] {
 
   for (const rawLine of source.split("\n")) {
     const line = rawLine.trim();
+
+    // A fenced block is verbatim until its closing fence: nothing inside it
+    // is a heading, a bullet or a blank that ends a paragraph.
+    if (FENCE.test(line)) {
+      if (fence) {
+        blocks.push({ type: "code", value: fence.join("\n") });
+        fence = null;
+      } else {
+        flushParagraph();
+        flushList();
+        fence = [];
+      }
+      continue;
+    }
+    if (fence) {
+      fence.push(rawLine.replace(/\r$/, ""));
+      continue;
+    }
 
     if (line === "") {
       flushParagraph();
@@ -110,11 +135,19 @@ export function parseMarkdown(source: string): BlockNode[] {
       continue;
     }
 
+    // An indented line under an open list continues its last item — a long
+    // bullet wrapped by hand — rather than ending the list for a paragraph.
+    if (list && /^\s/.test(rawLine)) {
+      list.items[list.items.length - 1] += ` ${line}`;
+      continue;
+    }
+
     flushList();
     paragraph.push(line);
   }
 
   flushParagraph();
   flushList();
+  if (fence) blocks.push({ type: "code", value: fence.join("\n") });
   return blocks;
 }
