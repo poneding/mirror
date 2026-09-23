@@ -236,6 +236,12 @@ describe("getInitialNumber", () => {
     expect(getInitialNumber(fakeStore(), STORAGE_KEYS.seekStep, 10, 5, 60)).toBe(10);
   });
 
+  // Number("") is 0 too: a blank value must not force the minimum either.
+  it("returns the fallback for a blank value rather than zero", () => {
+    expect(getInitialNumber(fakeStore({ [STORAGE_KEYS.volume]: "" }), STORAGE_KEYS.volume, 0.8, 0, 1)).toBe(0.8);
+    expect(getInitialNumber(fakeStore({ [STORAGE_KEYS.volume]: "   " }), STORAGE_KEYS.volume, 0.8, 0, 1)).toBe(0.8);
+  });
+
   it("clamps stored values into range", () => {
     expect(getInitialNumber(fakeStore({ v: "5" }), "v", 0.8, 0, 1)).toBe(1);
     expect(getInitialNumber(fakeStore({ v: "-3" }), "v", 0.8, 0, 1)).toBe(0);

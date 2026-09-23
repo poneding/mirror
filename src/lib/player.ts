@@ -183,7 +183,9 @@ export function getInitialNumber(
   maximum: number,
 ): number {
   const stored = store.getItem(key);
-  if (stored === null) return fallback;
+  // Number("") and Number("  ") are 0, which is finite and would pass as the
+  // minimum — the same trap as Number(null). Blank is not a value either.
+  if (stored === null || stored.trim() === "") return fallback;
   const parsed = Number(stored);
   return Number.isFinite(parsed) ? clamp(parsed, minimum, maximum) : fallback;
 }
