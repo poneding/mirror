@@ -20,15 +20,12 @@ CARGO_MANIFEST := src-tauri/Cargo.toml
 # `tauri` CLI comes from devDependencies, so prefer the local binary.
 TAURI        ?= $(NPM) run --silent tauri
 
-# Release artifact location (Tauri uses the crate name, not productName).
-RELEASE_BIN  := src-tauri/target/release/mirror
-
 # ---------------------------------------------------------------------------
 # Phony targets
 # ---------------------------------------------------------------------------
 
 .PHONY: help install check check-js check-rust lint lint-js lint-rust lint-fix \
-        fmt fmt-check test test-js test-rust test-watch test-coverage coverage \
+        fmt fmt-check test test-js test-rust test-watch coverage \
         run run-web build build-js build-app bundle audit clean clean-js clean-rust \
         clean-all reinstall icons
 
