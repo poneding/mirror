@@ -492,10 +492,16 @@ needs that manual step; pushes to `main` publish nothing.
 1. Tag `v1.2.3` (SemVer; `v1.2.3-rc.1` for a prerelease) and push it.
 2. `.github/workflows/release.yml` rejects non-SemVer tags, stamps the version
    into `package.json`, `package-lock.json`, `src-tauri/tauri.conf.json` and
-   `src-tauri/Cargo.toml`, creates the release, writes the git-cliff changelog
-   into its body, then builds and signs every desktop target, uploads the
-   bundles plus `latest.json`, and rewrites that feed to the release's own
-   download URLs.
+   `src-tauri/Cargo.toml`, creates the release **as a draft**, writes the
+   git-cliff changelog into its body, builds and signs every desktop target,
+   uploads the bundles plus `latest.json`, rewrites that feed to the release's
+   own download URLs, and only then publishes the draft. A published release is
+   `/releases/latest` at once, and its `latest.json` exists only after the last
+   build job uploads it, so publishing first left every update check in between
+   with a 404 — for good, when one platform failed. A draft that never publishes
+   leaves the previous release in place. Everything that looks the release up
+   while it is a draft has to find drafts: `gh release view`/`download` fall
+   back to them, the API's `releases/tags/<tag>` does not.
 3. That body *is* the changelog the app shows: `latest.json` carries it as
    `notes`, and the update notice renders it through `lib/markdown.ts` as
    elements — release notes are remote text, so they are never injected as HTML.

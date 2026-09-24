@@ -8,6 +8,11 @@
 #              the in-app update notice shows the same text.
 #   build      builds, signs and attaches the desktop bundles for every
 #              platform, plus latest.json for the updater.
+#   updater-feed  rewrites latest.json from the rate-limited API asset URLs to
+#              the release's own download URLs, once every build has uploaded.
+#   publish    turns the draft into the published release once the bundles
+#              are attached and the feed is rewritten, so /releases/latest
+#              never points at a release whose latest.json is missing or 403s.
 #
 # One-time setup is in README.md (signing key + TAURI_SIGNING_PRIVATE_KEY
 # repository secret).
@@ -34,6 +39,7 @@ jobs:
     outputs:
       version: ${{ steps.tag.outputs.version }}
       changelog: ${{ steps.cliff.outputs.content }}
+      draft: ${{ steps.release.outputs.draft }}
     steps:
       - name: Checkout the tag
         uses: actions/checkout@v7
@@ -66,6 +72,7 @@ jobs:
           OUTPUT: CHANGELOG.md
 
       - name: Create or update the release with the changelog
+        id: release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event.release.tag_name || github.ref_name }}
@@ -82,14 +89,24 @@ jobs:
             fi
           fi
 
-          # The tag push creates the release; a release published by hand is
-          # already there, and gets its body (and the flag) rewritten here.
+          # The tag push creates the release as a draft: a published release is
+          # /releases/latest at once, and its latest.json only exists after the
+          # last build job uploads it, so every installed app that checked in
+          # between — or ever, when one platform failed — got a 404. The draft
+          # is published by the `publish` job once every bundle is attached. A
+          # release published by hand is already there (`gh release view` finds
+          # a draft by tag too), and gets its body and flag rewritten here.
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release edit "$TAG" --notes-file CHANGELOG.md --prerelease="$prerelease"
           else
-            gh release create "$TAG" --title "Mirror $TAG" --verify-tag \
+            gh release create "$TAG" --title "Mirror $TAG" --verify-tag --draft \
               --notes-file CHANGELOG.md --prerelease="$prerelease"
           fi
+
+          # The build job must look the release up the way it exists now: the
+          # API does not return a draft by tag, and asking tauri-action for a
+          # draft when the release is published makes it create a second one.
+          echo "draft=$(gh release view "$TAG" --json isDraft --jq .isDraft)" >> "$GITHUB_OUTPUT"
 
   build:
     name: Build ${{ matrix.label }}
@@ -159,7 +176,9 @@ jobs:
           # is handed back exactly what the changelog job wrote.
           releaseName: ${{ github.event.release.name || format('Mirror {0}', github.event.release.tag_name || github.ref_name) }}
           releaseBody: ${{ needs.changelog.outputs.changelog }}
-          releaseDraft: false
+          # A draft is found by listing releases, a published one by tag; the
+          # changelog job reports which this release is.
+          releaseDraft: ${{ needs.changelog.outputs.draft == 'true' }}
           args: ${{ matrix.args }}
 
   # tauri-action v1 writes `latest.json` with `api.github.com` asset URLs — it
@@ -186,9 +205,13 @@ jobs:
           gh release download "$TAG" -R "$REPO" --pattern latest.json --clobber
 
           # asset id -> name, so an API URL can become the CDN URL for the same
-          # file without an API call from the client.
-          gh api "repos/$REPO/releases/tags/$TAG" --paginate \
-            --jq '.assets[] | "\(.id)\t\(.name)"' > assets.tsv
+          # file without an API call from the client. `gh release view`, not
+          # `repos/.../releases/tags/<tag>`: the release is still a draft here —
+          # `publish` makes it public once this feed is right — and the tags
+          # endpoint does not return drafts. The numeric id is the tail of each
+          # asset's API URL.
+          gh release view "$TAG" -R "$REPO" --json assets \
+            --jq '.assets[] | "\(.apiUrl | capture("(?<id>[0-9]+)$").id)\t\(.name)"' > assets.tsv
 
           jq --arg repo "$REPO" --arg tag "$TAG" --rawfile assets assets.tsv '
             ($assets | split("\n") | map(select(length > 0) | split("\t") | {(.[0]): .[1]}) | add) as $names
@@ -212,3 +235,21 @@ jobs:
 
           mv rewritten.json latest.json
           gh release upload "$TAG" latest.json -R "$REPO" --clobber
+
+  publish:
+    name: Publish
+    # Only a draft this run created is published here; a release published by
+    # hand already is. Every build job must have attached its bundles and the
+    # feed must already point at the CDN, so a failed platform or a failed
+    # rewrite leaves the draft in place, and /releases/latest keeps serving the
+    # previous release's latest.json instead of a broken one or one that 403s.
+    needs: [changelog, build, updater-feed]
+    if: needs.changelog.outputs.draft == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.event.release.tag_name || github.ref_name }}
+        run: gh release edit "$TAG" --draft=false
