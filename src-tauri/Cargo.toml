@@ -29,9 +29,12 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 fontdb = "0.24.0"
 
-# The updater is desktop-only, so it is not pulled in for other targets.
+# Both are desktop-only, so they are not pulled in for other targets.
 [target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
 tauri-plugin-updater = "2.11"
+# A file handed to Mirror is handed to the window that is already open rather
+# than to a second copy of the app.
+tauri-plugin-single-instance = "2.4"
 
 # macOS paints its three window buttons itself, as AppKit views over Mirror's
 # own titlebar. Hiding them with the bar means reaching those views, so the

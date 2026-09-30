@@ -435,6 +435,36 @@ rather than a captured `let`: subscribing is asynchronous, and under StrictMode 
 cleanup can run before it resolves, which left the first listener behind and made
 every drop arrive twice in development.
 
+**A video opened from the file manager** reaches Mirror as the program's first
+argument — the `%1` the file association is registered with — or, on macOS,
+as an Apple Event (`RunEvent::Opened`), because the Finder never passes it on
+the command line. Both paths put the path in one queue in `lib.rs` and tell the
+frontend, which drains it through the `take_launch_paths` command and loads it
+like any other selection, so that is the second way a file joins the playlist
+and starts playing. **The queue is the only delivery path; the event carries no
+payload.** That is what keeps a launch from loading twice, whichever of the
+startup drain and the event handler runs first, and it is why `launch_paths`
+skips the program name (the single-instance plugin hands over a second
+process's whole `argv`) and every option. Opening a video with Mirror is a
+request to play it, so the autoplay exception above does not apply to it.
+
+`tauri-plugin-single-instance` folds a second launch — a video double-clicked
+while Mirror is open — into the running window instead of starting a second
+one; its callback announces paths rather than opening them itself, so the
+running frontend is the only thing that ever loads a file. `bundle >
+fileAssociations` is what puts Mirror in the system's "open with" list. The
+extension list there is
+necessarily a second copy of `SUPPORTED_VIDEO_EXTENSIONS` — the installer reads
+JSON, the player reads TypeScript — so `src/lib/file-associations.test.ts`
+fails if the two drift apart. On Windows the installer registers those types as
+*the default handler* for each of them, not merely as a candidate: that is
+Tauri's `APP_ASSOCIATE` macro, and an "open with" entry that leaves the user's
+default alone would need an NSIS installer hook instead. The registry entries
+are written by the installer, so a dev build (`make run`) registers nothing —
+a launch with a file argument can be exercised by running the debug binary
+with a path, after building it with `--no-default-features` so it loads the dev
+server.
+
 **Settings panel**: a rail on the left switches between the five sections
 (外观 / 播放 / 更新 / 快捷键 / 关于); the body shows the selected one alone, so
 reaching 关于 no longer means scrolling past the other four. Section icons are

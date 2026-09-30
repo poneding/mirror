@@ -53,7 +53,51 @@
     ],
     "category": "Entertainment",
     "publisher": "Mirror",
-    "shortDescription": "A clean, offline video player"
+    "shortDescription": "A clean, offline video player",
+    "fileAssociations": [
+      {
+        "ext": ["mp4"],
+        "name": "Mirror.MP4",
+        "mimeType": "video/mp4",
+        "role": "Viewer",
+        "rank": "Alternate"
+      },
+      {
+        "ext": ["mkv"],
+        "name": "Mirror.MKV",
+        "mimeType": "video/x-matroska",
+        "role": "Viewer",
+        "rank": "Alternate"
+      },
+      {
+        "ext": ["webm"],
+        "name": "Mirror.WebM",
+        "mimeType": "video/webm",
+        "role": "Viewer",
+        "rank": "Alternate"
+      },
+      {
+        "ext": ["mov"],
+        "name": "Mirror.MOV",
+        "mimeType": "video/quicktime",
+        "role": "Viewer",
+        "rank": "Alternate"
+      },
+      {
+        "ext": ["avi"],
+        "name": "Mirror.AVI",
+        "mimeType": "video/x-msvideo",
+        "role": "Viewer",
+        "rank": "Alternate"
+      },
+      {
+        "ext": ["m4v"],
+        "name": "Mirror.M4V",
+        "mimeType": "video/x-m4v",
+        "role": "Viewer",
+        "rank": "Alternate"
+      }
+    ]
   },
   "plugins": {
     "updater": {

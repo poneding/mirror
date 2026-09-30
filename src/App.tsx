@@ -36,6 +36,7 @@ import {
   Zap,
 } from "lucide-react";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { getVersion } from "@tauri-apps/api/app";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
@@ -1170,6 +1171,28 @@ function App() {
         setIsDragOver(false);
       }
     });
+    return () => {
+      void subscription.then((dispose) => dispose()).catch(() => undefined);
+    };
+  }, [createItemsFromPaths]);
+
+  /* A video the system handed Mirror — a double-click in Explorer or the
+     Finder, or the `%1` a file association opens a program with — is a
+     selection like a dropped one, and launching Mirror with it is a request to
+     play it. The paths are queued on the native side and taken here; the event
+     says only that there is something to take, so whichever of this drain and
+     the event arrives first, a launch is loaded once. */
+  useEffect(() => {
+    if (!isTauri()) return;
+    const take = () => {
+      void invoke<string[]>("take_launch_paths")
+        .then((paths) => {
+          if (paths.length) void createItemsFromPaths(paths);
+        })
+        .catch(() => undefined);
+    };
+    const subscription = listen("mirror-open-paths", take);
+    take();
     return () => {
       void subscription.then((dispose) => dispose()).catch(() => undefined);
     };

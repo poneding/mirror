@@ -2,8 +2,8 @@ use serde::Serialize;
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
-use tauri::{LogicalSize, Manager, Size, Window};
+use std::sync::{Mutex, OnceLock};
+use tauri::{Emitter, LogicalSize, Manager, Size, Window};
 
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -480,18 +480,101 @@ fn apply_glass(window: &tauri::WebviewWindow) {
 #[cfg(not(any(target_os = "windows", target_os = "macos")))]
 fn apply_glass(_window: &tauri::WebviewWindow) {}
 
+/// Paths a launch asked Mirror to open, waiting for the frontend to collect them.
+///
+/// Windows and Linux hand a file to a program as its first argument — the `%1`
+/// the file association is registered with — so those are read from the command
+/// line at startup. macOS delivers the same thing as an Apple Event instead, and
+/// a second launch while Mirror is running arrives through the single-instance
+/// plugin; both queue here rather than opening anything themselves.
+static LAUNCH_PATHS: Mutex<Vec<String>> = Mutex::new(Vec::new());
+
+/// The file paths a command line asks Mirror to open.
+///
+/// Everything after the program name that is not an option is a path. The
+/// single-instance plugin hands over the second process's whole `argv`, program
+/// name included, so the first element is always dropped.
+fn launch_paths_from_args(args: impl IntoIterator<Item = String>) -> Vec<String> {
+    args.into_iter()
+        .skip(1)
+        .filter(|arg| !arg.starts_with('-'))
+        .collect()
+}
+
+/// Puts paths in the queue the frontend drains.
+fn queue_launch_paths(paths: Vec<String>) {
+    if let Ok(mut queued) = LAUNCH_PATHS.lock() {
+        queued.extend(paths);
+    }
+}
+
+/// Puts paths in the frontend's hands, which loads them like any other
+/// selection, and tells a running frontend that they are there.
+///
+/// The queue is the single delivery path — the event only says that there is
+/// something to take — so a path cannot arrive twice, however the startup drain
+/// and the event handler interleave, and a frontend reload can.
+fn queue_and_announce(app: &tauri::AppHandle, paths: Vec<String>) {
+    if paths.is_empty() {
+        return;
+    }
+    queue_launch_paths(paths);
+    let _ = app.emit("mirror-open-paths", ());
+}
+
+/// Queues the files macOS opened by Apple Event.
+///
+/// The Finder does not pass files on the command line; the association arrives
+/// here instead, on launch and on every later open.
+#[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
+fn announce_opened_paths(app: &tauri::AppHandle, event: tauri::RunEvent) {
+    if let tauri::RunEvent::Opened { urls } = event {
+        let paths = urls
+            .iter()
+            .filter_map(|url| url.to_file_path().ok())
+            .map(|path| path.to_string_lossy().into_owned())
+            .collect();
+        queue_and_announce(app, paths);
+    }
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "android")))]
+fn announce_opened_paths(_app: &tauri::AppHandle, _event: tauri::RunEvent) {}
+
+/// Hands the queued paths to the frontend and empties the queue, so a launch is
+/// loaded once and a reload cannot replay it.
+#[tauri::command]
+fn take_launch_paths() -> Vec<String> {
+    LAUNCH_PATHS
+        .lock()
+        .map(|mut queued| std::mem::take(&mut *queued))
+        .unwrap_or_default()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init());
 
+    /* A second launch — a video double-clicked while Mirror is already open —
+    does not become a second window: the plugin hands that command line to
+    the running instance (this callback) and the second process exits. */
+    #[cfg(desktop)]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+        queue_and_announce(app, launch_paths_from_args(argv));
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.unminimize();
+            let _ = window.set_focus();
+        }
+    }));
+
     // The updater plugin reads `plugins > updater` from tauri.conf.json, which
     // is where the release endpoint and signing public key live.
     #[cfg(desktop)]
     let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
 
-    builder
+    let app = builder
         // Video is read through Mirror's own protocol rather than Tauri's
         // `asset`, which cuts every reply short; `media.rs` has the why. Each
         // request reads from disk, so it runs off the main thread.
@@ -504,6 +587,7 @@ pub fn run() {
             if let Some(window) = app.get_webview_window("main") {
                 apply_glass(&window);
             }
+            queue_and_announce(app.handle(), launch_paths_from_args(std::env::args()));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -512,10 +596,13 @@ pub fn run() {
             set_window_fullscreen,
             set_traffic_lights_visible,
             list_system_fonts,
-            collect_video_paths
+            collect_video_paths,
+            take_launch_paths
         ])
-        .run(tauri::generate_context!())
+        .build(tauri::generate_context!())
         .expect("error while running Mirror");
+
+    app.run(announce_opened_paths);
 }
 
 #[cfg(test)]
@@ -786,5 +873,35 @@ mod tests {
         let fonts = font_lists([]);
         assert!(fonts.families.is_empty());
         assert!(fonts.monospace.is_empty());
+    }
+
+    /// A video double-clicked in the file manager arrives as the argument after
+    /// the program name, whichever way the system hands it over. A plain launch,
+    /// and one carrying only options, ask for nothing.
+    #[test]
+    fn launch_paths_are_what_follows_the_program_name() {
+        assert_eq!(
+            launch_paths_from_args([
+                "C:\\Program Files\\Mirror\\mirror.exe".to_string(),
+                "C:\\clips\\a.mkv".to_string(),
+                "D:\\clips\\B.MP4".to_string(),
+            ]),
+            ["C:\\clips\\a.mkv", "D:\\clips\\B.MP4"]
+        );
+        assert!(launch_paths_from_args(["mirror.exe".to_string()]).is_empty());
+        assert!(launch_paths_from_args([
+            "mirror.exe".to_string(),
+            "--remote-debugging-port=9222".to_string(),
+        ])
+        .is_empty());
+    }
+
+    /// The frontend relies on a launch being handed over once: the queue is the
+    /// only delivery path, so a path cannot be loaded twice.
+    #[test]
+    fn queued_launch_paths_are_taken_once() {
+        queue_launch_paths(vec!["a.mkv".to_string()]);
+        assert_eq!(take_launch_paths(), ["a.mkv"]);
+        assert!(take_launch_paths().is_empty());
     }
 }
