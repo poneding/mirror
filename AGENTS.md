@@ -187,6 +187,13 @@ The Makefile targets the actual development environment, verified:
 - A button that used to carry a border now says `border: 0` explicitly
   (`.combobox-trigger`, `.ghost-button`, `.update-button`); without it the UA
   border comes back and the control reads as a box.
+- Titlebar dragging uses `data-tauri-drag-region` and its existing window
+  permission, never CSS `app-region: drag`. WebView2 treats the CSS region as
+  non-client space and sends mouse-leave events while the pointer is still
+  over the titlebar. The shell hides both bars, exposes the page under the
+  pointer, then shows them again: continuous flickering. Keep the genuine
+  window-leave handler and idle timer unchanged. `src/lib/titlebar.test.ts`
+  guards the drag mechanism; verify hover and actual dragging in Tauri.
 - The shell chrome has no motion: the titlebar and the control bar appear and
   disappear instantly (no transition on them), and panels do not slide in — the
   `panel-in` / `panel-in-left` keyframes are gone. The feedback animations that

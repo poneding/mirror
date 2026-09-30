@@ -311,7 +311,9 @@ a:focus-visible {
      the top, which is the material without a drawn outline. */
   background: var(--glass-fill);
   backdrop-filter: var(--glass-blur);
-  -webkit-app-region: drag;
+  /* Dragging belongs to data-tauri-drag-region in App.tsx. A CSS native drag
+     region makes WebView2 report mouseleave while the pointer is still here;
+     hiding the bars then exposes the page and shows them again in a loop. */
 }
 
 /* Home is one surface already, so the bar adds nothing: no tint, no blur.
